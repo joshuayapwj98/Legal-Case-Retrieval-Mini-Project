@@ -2,11 +2,10 @@ import os
 import sys
 import csv
 import math
-import string
+import time
 from nltk.tokenize import word_tokenize
 from nltk.tokenize import sent_tokenize
 from nltk.stem.porter import PorterStemmer
-from collections import defaultdict
 
 class VectorSpaceModel:
     """
@@ -39,14 +38,15 @@ class VectorSpaceModel:
                 
         """
         total_docs = -1
-        max_docs = 50
+        # max_docs = float('inf')
+        max_docs = 500
 
         all_doc = {}
         all_doc_ids = []
-        title = []
-        content = []
-        date_posted = []
-        court = []
+        title = {}
+        content = {}
+        date_posted = {}
+        court = {}
 
         csv.field_size_limit(sys.maxsize)
 
@@ -54,43 +54,36 @@ class VectorSpaceModel:
             reader = csv.reader(file, delimiter = ',')
             for data in reader:
                 total_docs += 1
+                # skip column titles
                 if (total_docs == 0):
-                    # print("skip: ", data[0])
                     continue
                 if (total_docs > max_docs):
-                    # print("break at: ",data[0])
                     break
-                all_doc[data[0]] = data[1:]
-                # all_doc.append(data)
-        
-        # for id in all_doc:
-        #     print(id)
-        # remove column titles
-        # all_doc.pop(next(iter(all_doc)))
-        # print(len(all_doc))
+                if data[0] in all_doc:
+                    prev_data = all_doc[data[0]]
+                    prev_data[0] += " " + data[1]
+                    prev_data[1] += " " + data[2]
+                    prev_data[2] += " " + data[3]
+                    prev_data[3] += " " + data[4]
+                    all_doc[data[0]] = prev_data
+                else:
+                    all_doc[data[0]] = data[1:]
 
         # sort data in increasing doc_id
         dict(sorted(all_doc.items()))
 
         for key in all_doc:
-            # print(key)
             all_doc_ids.append(key)
-            title.append(all_doc[key][0])
-            content.append(all_doc[key][1])
-            date_posted.append(all_doc[key][2])
-            court.append(all_doc[key][3])
-
-        # print(len(all_doc_ids))
+            title[key] = all_doc[key][0]
+            content[key] = all_doc[key][1]
+            date_posted[key] = all_doc[key][2]
+            court[key] = all_doc[key][3]
 
         # Write to a txt file for search to access all doc_ids 
         with open("all_doc_ids.txt", "w") as file:
             file.write(" ".join(map(str, all_doc_ids)))
 
-        # print("doc_id: ", doc_id)
-        # print("title: ", title)
-        # print(content)
-        # print("date_posted: ", date_posted)
-        # print("court: ", court)
+        print("completed parsing {} number of data".format(len(all_doc)))
 
         return all_doc_ids, title, content, date_posted, court
     
@@ -118,31 +111,34 @@ class VectorSpaceModel:
         """
         Method to construct the indexing of all terms and their postings
         """
+        st = time.time()
         self.reset_files()
 
         print("constructing index...")
         stemmer = PorterStemmer()
         all_doc_ids, title, content, date_posted, court = self.parse_data()
-        # all_doc_ids = self.get_all_doc_ids()
         total_num_docs = len(all_doc_ids)
         terms = list() # a list of terms
         term_doc_freq = {} # key: string, value: int { term : doc_freq }
         term_id_pos = {} # { term : { docID : [position...] } }
         postings = {} # key: string, value: a dictionary { term : {docID : term_freq, docID : term_freq ...} }
-
-        # print(content)
         count = 0
 
         for doc_id in all_doc_ids:
+            if (count % 100 == 0):
+                print("completed parsing {} number of documents. Parsing next 100 documents...".format(count))
+                end = time.time()
+                print("time taken: " + str(end - st))
+
             doc_id = str(doc_id)
             terms_counted = list() # list of terms in doc_id already counted in doc_freq
             position = 0 # positional index
-            for line in content[count]:
+            doc_content = content[doc_id].split("\n")
+            for line in doc_content:
                 for sentence_token in sent_tokenize(line):
                     for word_token in word_tokenize(sentence_token):
                         # stem and case-folding
                         word_token = stemmer.stem(word_token).lower()
-
                         # skip empty strings
                         if len(word_token) == 0:
                             continue
