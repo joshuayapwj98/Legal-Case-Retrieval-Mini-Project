@@ -15,6 +15,8 @@ import collections
 import math
 import time
 
+from index_vector_space_model import VectorSpaceModel
+
 def usage():
     print("usage: " +
           sys.argv[0] + " -i directory-of-documents -d dictionary-file -p postings-file")
@@ -29,9 +31,11 @@ def build_index(in_dir, out_dict, out_postings):
 
     # get the start time
     st = time.time()
-    
-    # This is an empty method
-    # Pls implement your code in below
+    VectorSpaceModel(in_dir, out_dict, out_postings).construct()
+    # VectorSpaceModel(in_dir, out_dict, out_postings).parse_data()
+    end = time.time()
+
+    print("time taken: " + str(end - st))
 
 input_directory = output_file_dictionary = output_file_postings = None
 
