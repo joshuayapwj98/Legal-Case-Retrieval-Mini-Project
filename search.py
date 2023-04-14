@@ -16,6 +16,7 @@ import collections
 import math
 import pickle
 import heapq
+from query_parser import QueryParser
 
 stemmer = PorterStemmer()
 
@@ -35,6 +36,13 @@ def run_search(dict_file, postings_file, queries_file, results_file):
     print('running search on the queries...')
     # This is an empty method
     # Pls implement your code in below
+
+    # Read first line of query file
+    with open(file_of_queries, "r") as f:
+        query = f.readline().strip()
+
+    parser = QueryParser()
+    parser.process_query(query)
 
 dictionary_file = postings_file = file_of_queries = output_file_of_results = None
 
