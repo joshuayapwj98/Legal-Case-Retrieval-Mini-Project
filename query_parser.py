@@ -2,6 +2,9 @@ from stack import Stack
 import math
 import heapq
 import collections
+import re
+
+from nltk.stem.porter import PorterStemmer
 
 class QueryParser:
 
@@ -9,25 +12,20 @@ class QueryParser:
         # N represents the total number of articles in the dataset.
         N = 0
         K = 10
+        doc_lengths = []
 
     def process_query(self, query):
         
         print("processing query...")
 
-        # perform stemming for each term in the query
-        
+        self.doc_lengths = self.get_document("document.txt")
 
-        with open('document.txt', 'r') as f:
-            data = f.read().split()
-            # Set N as the total number of articles
-            N = int(data[0])
-            doc_lengths = [(int(data[i]), float(data[i+1])) for i in range(1, len(data), 2)]
-            print(doc_lengths)
-
-        if 'AND' in query:
+        if 'AND' in query[0]:
             results = self.process_boolean_query(query)
         else:
             results = self.process_freetext_query(query)
+
+        return results
 
 
     # ==========================================================================
@@ -42,7 +40,7 @@ class QueryParser:
         print("processing boolean query...")
 
         # Split the query string into terms using 'AND' as the delimiter
-        terms = query.split(' AND ')
+        terms = query[0].split(' AND ')
         print(terms)
 
         # 1. Go through the entire query and put it into a py dict.
@@ -73,8 +71,11 @@ class QueryParser:
 
             # 2b. Add to operator stack
             self_combining_stack.push(postings_list)
+            
+        common_docs = []
+        if not self_combining_stack.isEmpty():
+            common_docs.append(self_combining_stack.pop())
 
-        common_docs = self_combining_stack.pop()
         return common_docs
     
 
@@ -90,25 +91,35 @@ class QueryParser:
 
         score_dict = collections.defaultdict(lambda: 0)
 
-        # Iterate through each term in the query
-        for word in query:
-            queryIndex[word] += 1
-        
-        square_val_list = []
-        for word in queryIndex:
-            postingList = self.get_postings_list(word)
-            query_term_weight = self.get_query_term_weight(word, queryIndex, len(postingList))
-            query_weight_dict[word] = query_term_weight
-            square_val_list.append(query_term_weight ** 2)
-        
-        square_val_list.sort()
-        square_sum = sum(square_val_list)
+        # Iterate through each term in the contextual query
+        q = query[0]
+        words = re.findall(r'(\w+|"[^"]+")', q)
 
-        # Get the query normalization factor 
-        query_normalization_factor = math.sqrt(square_sum)
+        # Remove the quotes from the words in double quotes
+        words = [word.strip('"') for word in words]
 
-        self.get_top_k_components(score_dict)
-        return
+        for token in words:
+            if self.is_phrase(token):
+                return self.process_phrase(token)
+            else:
+                queryIndex[token] += 1
+        
+                square_val_list = []
+                for word in queryIndex:
+                    postingList = self.get_postings_list(word)
+                    query_term_weight = self.get_query_term_weight(word, queryIndex, len(postingList))
+                    query_weight_dict[word] = query_term_weight
+                    square_val_list.append(query_term_weight ** 2)
+                
+                square_val_list.sort()
+                square_sum = sum(square_val_list)
+
+                # Get the query normalization factor 
+                query_normalization_factor = math.sqrt(square_sum)
+
+                # TODO: calculate document length and return top k components
+
+                return self.get_top_k_components(score_dict)
     
     # ====================================================================
     # ====================== RANKING PROCESSING ==========================
@@ -147,8 +158,23 @@ class QueryParser:
         return string.count(' ') > 0
 
     # ==========================================================================
-    # ====================== ACCESS POSTINGS LIST ==============================
+    # ====================== ACCESS INDEXING ===================================
     # ==========================================================================
 
-    def get_postings_list(term):
+    def get_postings_list(self, term):
         return
+    
+    def get_document(self, file_name):
+        doc_length = []
+        with open(file_name, 'r') as f:
+            data = f.read().split()
+            # Set N as the total number of articles
+            self.N = int(data[0])
+            # Iterate through each document pair
+            for docid_length in data[1:]:
+                docid_length = docid_length.split(',')
+                data = [int(docid_length[0]), float(docid_length[1])]
+                doc_length.append(data)
+            
+        return doc_length
+

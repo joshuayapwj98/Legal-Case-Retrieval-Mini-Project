@@ -10,6 +10,9 @@ class Stack:
     def pop(self):
         return self.items.pop()
     
+    def isEmpty(self):
+        return len(self.items) == 0
+    
     def combine(self):
         a, b = self.items[-2:]
         result = self.AND_operation(a, b)
