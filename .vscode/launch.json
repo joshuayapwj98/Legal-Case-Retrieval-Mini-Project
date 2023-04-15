@@ -11,9 +11,9 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["-d", "dictionary.txt", "-p", "postings.txt", "-q", "queries.txt", "-o", "results.txt"]
+            "args": ["-d", "dictionary.txt", "-p", "postings.txt", "-q", "queries", "-o", "results.txt"]
             // "args": ["-i", "/Users/joshuayap/nltk_data/corpora/reuters/sub_training", "-d", "dictionary.txt", "-p", "postings.txt"]
-            // "args": ["-i", "./dataset_subset.csv", "-d", "dictionary.txt", "-p", "postings.txt"]
+            // "args": ["-i", "./reuters/sub_training", "-d", "dictionary.txt", "-p", "postings.txt"]
         }
     ]
 }

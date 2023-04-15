@@ -5,17 +5,9 @@ os.environ['NUMEXPR_NUM_THREADS'] = '1'
 os.environ['OMP_NUM_THREADS'] = '1'
 os.environ['OPENBLAS_NUM_THREADS'] = '1'
 
-import nltk
 import sys
-import math
-import collections
-import pickle
 from nltk.stem.porter import PorterStemmer
 import getopt
-import collections
-import math
-import pickle
-import heapq
 from query_parser import QueryParser
 
 stemmer = PorterStemmer()
@@ -28,7 +20,7 @@ def usage():
           sys.argv[0] + " -d dictionary-file -p postings-file -q file-of-queries -o output-file-of-results")
 
 
-def run_search(dict_file, postings_file, queries_file, results_file):
+def run_search(dict_file, postings_file, queries_path, results_file):
     """
     using the given dictionary file and postings file,
     perform searching on the given queries file and output the results to a file
@@ -36,15 +28,19 @@ def run_search(dict_file, postings_file, queries_file, results_file):
     print('running search on the queries...')
     # This is an empty method
     # Pls implement your code in below
-
-    # Read first line of query file
-    with open(file_of_queries, "r") as f:
-        query = f.readline().strip()
-
+    
     parser = QueryParser()
-    parser.process_query(query)
+    
+    # Iterate through all the files in the queries folder
+    for file_name in os.listdir(queries_path):
+        file_path = os.path.join(queries_path, file_name)
+        if os.path.isfile(file_path):
+            with open(file_path, 'r') as file:
+                # Get the contents of the text file and split it by the break line
+                contents = file.read().split('\n')
+                parser.process_query(contents)
 
-dictionary_file = postings_file = file_of_queries = output_file_of_results = None
+dictionary_file = postings_file = queries_path = output_file_of_results = None
 
 try:
     opts, args = getopt.getopt(sys.argv[1:], 'd:p:q:o:')

@@ -11,15 +11,18 @@ class QueryParser:
         K = 10
 
     def process_query(self, query):
-
+        
         print("processing query...")
+
+        # perform stemming for each term in the query
+        
 
         with open('document.txt', 'r') as f:
             data = f.read().split()
             # Set N as the total number of articles
             N = int(data[0])
             doc_lengths = [(int(data[i]), float(data[i+1])) for i in range(1, len(data), 2)]
-
+            print(doc_lengths)
 
         if 'AND' in query:
             results = self.process_boolean_query(query)
@@ -73,9 +76,6 @@ class QueryParser:
 
         common_docs = self_combining_stack.pop()
         return common_docs
-
-    def is_phrase(self, string): 
-        return string.count(' ') > 0
     
 
     # ======================================================================
@@ -88,9 +88,9 @@ class QueryParser:
         # Collection to store the query term weight
         query_weight_dict = collections.defaultdict(lambda: 0)
 
-
         score_dict = collections.defaultdict(lambda: 0)
 
+        # Iterate through each term in the query
         for word in query:
             queryIndex[word] += 1
         
@@ -106,18 +106,6 @@ class QueryParser:
 
         # Get the query normalization factor 
         query_normalization_factor = math.sqrt(square_sum)
-
-        for term in queryIndex:
-            # get normalised query vector item
-            postingList = self.get_postings_list(term)
-            query_term_weight = query_weight_dict[term]
-            query_term_weight /= query_normalization_factor
-
-        # get normalised document vector item, then add score
-        # [documentId, frequency]
-        for frequencyPair in postingList:
-            currScore = document_term_weights_dict[frequencyPair[0]][term] * query_term_weight
-            score_dict[frequencyPair[0]] += currScore
 
         self.get_top_k_components(score_dict)
         return
@@ -145,12 +133,22 @@ class QueryParser:
 
         return result
 
+    # ==========================================================================
+    # ====================== PHRASAL QUERY PROCESSING ==========================
+    # ==========================================================================
     '''
     Processes the phrasal query and returns a list of documents that are
     relevant.  
     '''
     def process_phrase(self, phrase):
         return
+
+    def is_phrase(self, string): 
+        return string.count(' ') > 0
+
+    # ==========================================================================
+    # ====================== ACCESS POSTINGS LIST ==============================
+    # ==========================================================================
 
     def get_postings_list(term):
         return
