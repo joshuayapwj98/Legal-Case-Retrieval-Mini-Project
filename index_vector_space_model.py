@@ -20,6 +20,9 @@ class VectorSpaceModel:
     document.txt: output file written in the form of [total_num_of_doc (docID, len_of_doc) (docID, len_of_doc) ...],
                     where len_of_doc is the length of the document in vector space 
     """
+
+    MAX_LINES_IN_MEM = 10000
+
     def __init__(self, in_dir, out_dict, out_postings):
         """
         Initialise input directory and output files
@@ -172,7 +175,8 @@ class VectorSpaceModel:
         
         doc_len, postings = self.construct_weighted_postings(all_doc_ids, term_id_pos)
         terms.sort()
-        self.write_to_disk(terms, term_doc_freq, postings, doc_len, total_num_docs)
+        self.write_output_files(terms, term_doc_freq, postings)
+        self.write_output_document(total_num_docs, doc_len)
 
     def construct_weighted_postings(self, all_doc_ids, term_id_pos):
         """
@@ -215,7 +219,7 @@ class VectorSpaceModel:
         
         return doc_len, postings
 
-    def write_to_disk(self, terms, term_doc_freq, postings, doc_len, total_num_docs):
+    def write_output_files(self, terms, term_doc_freq, postings):
         """
         Method to write into out_dict, out_postings and document.txt
 
@@ -231,10 +235,10 @@ class VectorSpaceModel:
 
         final_dictionary = "" # term doc_freq reference
         final_postings = "" # term (docID,term_freq) (docID,term_freq) ...
-        final_document = "" # totalNumDocs (docID,lenOfDoc) (docID,lenOfDoc) ...
         final_pointers = "" # (dict_ptr,posting_ptr,posting_ptr,posting_ptr,posting_ptr) ...
         posting_ref = 0
         dictionary_ref = 0
+        line_in_mem = 0
         block_size = 4 # index compression blocking
         posting_pointer = list()
 
@@ -249,8 +253,6 @@ class VectorSpaceModel:
             prev_id = 0
 
             for docID_weighted, positions in posting.items():
-                # print(docID_weighted)
-                # print(positions)
                 doc_id = int(docID_weighted[0])
                 gap_encoded_id = doc_id - prev_id
                 weightedtf = str(docID_weighted[1])
@@ -270,11 +272,29 @@ class VectorSpaceModel:
                 dictionary_content = "|{}|{}".format(str(len(term)), term)
                 final_dictionary += dictionary_content
             else:
+                dictionary_content = "|{}|{}".format(str(len(term)), term)
+                final_dictionary += dictionary_content
+
                 posting_ref_content = ','.join(str(e) for e in posting_pointer)
                 dict_post_pointer = " {},{}".format(dictionary_ref, posting_ref_content)
-                dictionary_ref = len(final_dictionary)
+                dictionary_ref += len(dict_post_pointer)
                 final_pointers += dict_post_pointer
                 posting_pointer = list()
+            
+            # write out into dictionary and postings files
+            if (line_in_mem == self.MAX_LINES_IN_MEM):
+                print("append next 100 terms into dictionary, posting and pointers.txt files")
+                self.append_content(self.out_dict, final_dictionary)
+                self.append_content(self.out_postings, final_postings)
+                self.append_content("pointers.txt", final_pointers)
+
+                # reset values
+                line_in_mem = 0
+                final_dictionary = "" 
+                final_postings = ""
+                final_pointers = ""
+        
+            line_in_mem += 1
         
         if (len(posting_pointer) != 0):
             posting_ref_content = ','.join(str(e) for e in posting_pointer)
@@ -283,18 +303,23 @@ class VectorSpaceModel:
             final_pointers += dict_post_pointer
             posting_pointer = list()
 
+        # write out into final dictionary, postings and pointers files
+        print("writing to output files...")
+        self.append_content(self.out_dict, final_dictionary)
+        self.append_content(self.out_postings, final_postings)
+        self.append_content("pointers.txt", final_pointers)
+
+    def write_output_document(self, total_num_docs, doc_len):
+        final_document = "" # totalNumDocs (docID,lenOfDoc) (docID,lenOfDoc) ...
         final_document += str(total_num_docs)
 
         for doc_id in doc_len:
             final_document += " {},{}".format(str(doc_id), str(doc_len[doc_id]))
 
-        # write out into final dictionary, postings and document files
-        print("writing to output files...")
-        self.write_content(self.out_dict, final_dictionary)
-        self.write_content(self.out_postings, final_postings)
+        # write out into final document file
+        print("writing to document.txt file")
         self.write_content("document.txt", final_document)
-        self.write_content("pointers.txt", final_pointers)
-
+        
     def write_content(self, out_file, content):
         """
         Method to write content into file
@@ -304,6 +329,18 @@ class VectorSpaceModel:
                 content: a string
         """
         f = open(out_file, "w")
+        f.write(content)
+        f.close()
+
+    def append_content(self, out_file, content):
+        """
+        Method to write content into file
+        
+            Parameters:
+                out_file: a file
+                content: a string
+        """
+        f = open(out_file, "a")
         f.write(content)
         f.close()
 
