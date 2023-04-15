@@ -16,6 +16,7 @@ import collections
 import math
 import pickle
 import heapq
+from postings_reader import PostingsReader
 
 stemmer = PorterStemmer()
 
@@ -35,6 +36,9 @@ def run_search(dict_file, postings_file, queries_file, results_file):
     print('running search on the queries...')
     # This is an empty method
     # Pls implement your code in below
+
+    postings_reader = PostingsReader()
+    postings_reader.get_postings_ptr('hello')
 
 dictionary_file = postings_file = file_of_queries = output_file_of_results = None
 
