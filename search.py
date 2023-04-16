@@ -6,11 +6,9 @@ os.environ['OMP_NUM_THREADS'] = '1'
 os.environ['OPENBLAS_NUM_THREADS'] = '1'
 
 import sys
-from nltk.stem.porter import PorterStemmer
 import getopt
 from query_parser import QueryParser
-
-stemmer = PorterStemmer()
+from postings_reader import PostingsReader
 
 # python3 search.py -d dictionary.txt -p postings.txt -q queries.txt -o results.txt
 
@@ -38,9 +36,9 @@ def run_search(dict_file, postings_file, queries_path, results_file):
             with open(file_path, 'r') as file:
                 # Get the contents of the text file and split it by the break line
                 contents = file.read().split('\n')
-                parser.process_query(contents)
+                parser.process_query(contents, 10)
 
-dictionary_file = postings_file = queries_path = output_file_of_results = None
+dictionary_file = postings_file = file_of_queries = output_file_of_results = None
 
 try:
     opts, args = getopt.getopt(sys.argv[1:], 'd:p:q:o:')

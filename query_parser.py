@@ -2,22 +2,25 @@ from stack import Stack
 import math
 import heapq
 import collections
-import re
+import nltk
 
 from nltk.stem.porter import PorterStemmer
+from postings_reader import PostingsReader
 
 class QueryParser:
 
     def __init__(self):
         # N represents the total number of articles in the dataset.
-        N = 0
-        K = 10
-        doc_lengths = []
+        self.N = 0
+        self.K = 10
+        self.doc_lengths = dict()
+        self.postings_reader = PostingsReader()
+        self.stemmer = PorterStemmer()
 
-    def process_query(self, query):
+    def process_query(self, query, K):
+        self.K = K
         
         print("processing query...")
-
         self.doc_lengths = self.get_document("document.txt")
 
         if 'AND' in query[0]:
@@ -41,7 +44,6 @@ class QueryParser:
 
         # Split the query string into terms using 'AND' as the delimiter
         terms = query[0].split(' AND ')
-        print(terms)
 
         # 1. Go through the entire query and put it into a py dict.
         # Put phrasal queries in a separate dictionary, where the key is the phrasal query and the value is the postings list. 
@@ -82,7 +84,11 @@ class QueryParser:
     # ======================================================================
     # ====================== FREE TEXT PROCESSING ==========================
     # ======================================================================
-
+    '''
+    Process queries that does not contain an 'AND' keyword. Queries could be
+    - quiet phone call
+    - good grades exchange scandal
+    '''
     def process_freetext_query(self, query):
         # Collection to count the occurences of a term in a query
         queryIndex = collections.defaultdict(lambda: 0)
@@ -91,39 +97,57 @@ class QueryParser:
 
         score_dict = collections.defaultdict(lambda: 0)
 
-        # Iterate through each term in the contextual query
-        q = query[0]
-        words = re.findall(r'(\w+|"[^"]+")', q)
+        # # Iterate through each term in the contextual query
+        # q = query[0]
+        # words = re.findall(r'(\w+|"[^"]+")', q)
 
-        # Remove the quotes from the words in double quotes
-        words = [word.strip('"') for word in words]
+        # # Remove the quotes from the words in double quotes
+        # words = [word.strip('"') for word in words]
 
-        for token in words:
-            if self.is_phrase(token):
-                return self.process_phrase(token)
-            else:
-                queryIndex[token] += 1
+        terms = self.tokenize_query(query[0])
+
+        for term in terms:
+            queryIndex[term] += 1
+
+        square_val_list = []
+        for term in queryIndex:
+            postingList = self.get_postings_list(term)
+            query_term_weight = self.get_query_term_weight(term, queryIndex, len(postingList))
+            query_weight_dict[term] = query_term_weight
+            square_val_list.append(query_term_weight ** 2)
         
-                square_val_list = []
-                for word in queryIndex:
-                    postingList = self.get_postings_list(word)
-                    query_term_weight = self.get_query_term_weight(word, queryIndex, len(postingList))
-                    query_weight_dict[word] = query_term_weight
-                    square_val_list.append(query_term_weight ** 2)
-                
-                square_val_list.sort()
-                square_sum = sum(square_val_list)
+        square_val_list.sort()
+        square_sum = sum(square_val_list)
 
-                # Get the query normalization factor 
-                query_normalization_factor = math.sqrt(square_sum)
+        # Get the query normalization factor 
+        query_normalization_factor = math.sqrt(square_sum)
 
-                # TODO: calculate document length and return top k components
+        for term in queryIndex:
+            # get normalised query vector item
+            postingList = self.get_postings_list(term)
+            query_term_weight = query_weight_dict[term]
+            query_term_weight /= query_normalization_factor
 
-                return self.get_top_k_components(score_dict)
+            # get normalised document vector item, then add score
+            for document_id in postingList:
+                currScore = self.doc_lengths[document_id] * query_term_weight
+                score_dict[document_id] += currScore
+        
+        return self.get_top_K_components(score_dict, self.K)
     
     # ====================================================================
     # ====================== RANKING PROCESSING ==========================
     # ====================================================================
+
+    def tokenize_query(self, query):
+        query = nltk.tokenize.word_tokenize(query.strip())
+        terms = []
+
+        for term in query:
+            stemmed = self.stemmer.stem(term.lower())
+            terms.append(stemmed)
+        
+        return terms
 
     def get_query_term_weight(self, query_term, termIndex, postings_list_len):
         if postings_list_len == 0:
@@ -133,14 +157,18 @@ class QueryParser:
     def get_document_term_weight(self, document_term_frequency):
         return 1 + math.log(document_term_frequency, 10)
         
-    def get_top_K_components(self, scores_dic):
+    def get_top_K_components(scores_dic, K):
         result = []
         score_tuples = [(-score, doc_id) for doc_id, score in scores_dic.items()]
         
         heapq.heapify(score_tuples)
-        for i in range(self.K):
-            tuple_result = heapq.heappop(score_tuples)
-            result.append(tuple_result[1])
+
+        for i in range(K):
+            if len(score_tuples) != 0:
+                tuple_result = heapq.heappop(score_tuples)
+                result.append(tuple_result[1])
+            else:
+                break
 
         return result
 
@@ -162,10 +190,11 @@ class QueryParser:
     # ==========================================================================
 
     def get_postings_list(self, term):
-        return
+        stemmed_token = self.stemmer.stem(term).lower()
+        return self.postings_reader.get_postings_ptr(stemmed_token)
     
     def get_document(self, file_name):
-        doc_length = []
+        doc_length = dict()
         with open(file_name, 'r') as f:
             data = f.read().split()
             # Set N as the total number of articles
@@ -173,8 +202,9 @@ class QueryParser:
             # Iterate through each document pair
             for docid_length in data[1:]:
                 docid_length = docid_length.split(',')
-                data = [int(docid_length[0]), float(docid_length[1])]
-                doc_length.append(data)
+                document_id = int(docid_length[0])
+                document_length = float(docid_length[1])
+                doc_length[document_id] = document_length
             
         return doc_length
 
