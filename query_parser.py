@@ -221,8 +221,7 @@ class QueryParser:
     # ==========================================================================
 
     def get_postings_list(self, term):
-        stemmed_token = self.stemmer.stem(term).lower()
-        postings_list_ptr = self.postings_reader.get_postings_ptr(stemmed_token)
+        postings_list_ptr = self.postings_reader.get_postings_ptr(term)
         with open('postings.txt', 'r') as f:
             if postings_list_ptr == -1:
                 print('[DEBUG] Cannot find term', term)
