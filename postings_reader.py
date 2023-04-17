@@ -39,10 +39,6 @@ class PostingsReader:
             f = open('dictionary.txt', 'r')
             f.seek(dict_ptr, 0) # Points to |7|carrara|7|carrati|8|carratti|5|carri...
 
-            # Seek to the start of the current block
-            while f.read(1) != '|':
-                pass
-
             # Linear search through each block
             # E.g. |7|claim55|7|claim62|8|claimabl|8|claimant
             num_of_terms = len(curr_block) - 1

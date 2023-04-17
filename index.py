@@ -5,14 +5,9 @@ os.environ['NUMEXPR_NUM_THREADS'] = '1'
 os.environ['OMP_NUM_THREADS'] = '1'
 os.environ['OPENBLAS_NUM_THREADS'] = '1'
 
-import nltk
 import sys
 import getopt
-import pickle
-import shutil
 import sys
-import collections
-import math
 import time
 
 from index_vector_space_model import VectorSpaceModel
