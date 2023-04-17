@@ -3,6 +3,7 @@ import math
 import heapq
 import collections
 import nltk
+import numpy as np
 
 from nltk.stem.porter import PorterStemmer
 from postings_reader import PostingsReader
@@ -157,14 +158,6 @@ class QueryParser:
         
         return terms
 
-    def get_query_term_weight(self, query_term, termIndex, postings_list_len):
-        if postings_list_len == 0:
-            return 0
-        return (1 + math.log(termIndex[query_term], 10)) * math.log(self.N/postings_list_len, 10)
-
-    def get_document_term_weight(self, document_term_frequency):
-        return 1 + math.log(document_term_frequency, 10)
-
     def get_query_normalization_vectors(self, term_dict):
         square_w_tq_list = []
         query_weight_dict = collections.defaultdict(lambda: 0)
@@ -207,6 +200,30 @@ class QueryParser:
                 break
 
         return result
+    
+    def rocchio(query, top_docs, relevant_docs, nonrelevant_docs, alpha=1, beta=0.75, gamma=0.15):
+
+        # Get the vocabulary of the top k documents
+        vocab = set()
+        for doc in top_docs:
+            for term in doc['terms']:
+                vocab.add(term)
+
+        # Initialize the new query vector with zero weights
+        new_query = collections.defaultdict(float)
+
+        # Update the new query vector using the Rocchio algorithm
+        for term in vocab:
+            w_tq = query.get(term, 0)
+            # Compute the centroid of the relevant documents
+            # w_rd = np.mean([doc['tf-idf'].get(term, 0) for doc in relevant_docs])
+            # Compute the centroid of the non-relevant documents
+            # w_nrd = np.mean([doc['tf-idf'].get(term, 0) for doc in nonrelevant_docs])
+
+            # Update the weight of the term in the new query vector
+            # new_query[term] = alpha * w_tq + beta * w_rd - gamma * w_nrd
+
+        return dict(new_query)
 
     # ==========================================================================
     # ====================== PHRASAL QUERY PROCESSING ==========================
