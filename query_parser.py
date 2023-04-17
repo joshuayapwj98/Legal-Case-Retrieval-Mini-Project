@@ -73,9 +73,10 @@ class QueryParser:
         # Process phrasal queries
         for t in terms:
             t = t.strip('"')
+            postings_result_set = set()
             if self.is_phrase(t):
                 terms = self.tokenize_boolean_query(t)
-                postings_result = self.process_phrase(terms)
+                postings_result_set = self.process_phrase(terms)
                 # phrasal_terms[t] = postings_result
                 # query_terms[t] = postings_result.count() --> len of docIDs
 
@@ -244,7 +245,7 @@ class QueryParser:
         for i in range(1, len(postings)):
             common_docs = common_docs & postings[i]
 
-        valid_docs = []
+        valid_docs = set()
         # 3. For each common document, check document(s) for the term sequence
         for doc in common_docs:
             
@@ -259,7 +260,7 @@ class QueryParser:
                     break
 
             if is_valid == True:
-                valid_docs.append(doc)
+                valid_docs.add(doc)
             
         return valid_docs
     
