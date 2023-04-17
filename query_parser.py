@@ -74,8 +74,9 @@ class QueryParser:
         for t in terms:
             t = t.strip('"')
             if self.is_phrase(t):
-                postings_result = self.process_phrase(t)
-                phrasal_terms[t] = postings_result
+                terms = self.tokenize_boolean_query(t)
+                postings_result = self.process_phrase(terms)
+                # phrasal_terms[t] = postings_result
                 # query_terms[t] = postings_result.count() --> len of docIDs
 
             else: 
@@ -146,6 +147,18 @@ class QueryParser:
     # ====================== RANKING PROCESSING ==========================
     # ====================================================================
     
+    def tokenize_boolean_query(self, terms):
+        tokenized_terms = []
+
+        for term in terms.split(' '):
+            # stem and case-folding
+            word_token = self.stemmer.stem(term).lower()
+            if len(word_token) == 0:
+                continue
+            else: tokenized_terms.append(word_token)
+        
+        return tokenized_terms
+
     def tokenize_query(self, query):
         query = query.strip()
         terms = []
@@ -211,7 +224,52 @@ class QueryParser:
     relevant.  
     '''
     def process_phrase(self, phrase):
-        return
+        postings_dict = {}
+        postings = []
+
+        # 1. Obtain the postings for each term
+        for term in phrase:
+            posting = self.get_postings_list(term)
+            if len(posting.postings) != 0:
+                postings_map = posting.postings
+                postings_dict[term] = postings_map
+                postings.append(set(postings_map.keys()))
+            else:
+                # postings.append(set())
+                # TODO: Check if returning an empty list since a term is not present in any document
+                return []
+        
+        # 2. Find the common documents from the set of document IDs
+        common_docs = postings[0]
+        for i in range(1, len(postings)):
+            common_docs = common_docs & postings[i]
+
+        valid_docs = []
+        # 3. For each common document, check document(s) for the term sequence
+        for doc in common_docs:
+            
+            is_valid = True
+
+            for i in range(0, len(phrase) - 1):
+                positions1 = postings_dict[phrase[i]][doc]['positions']
+                positions2 = postings_dict[phrase[i+1]][doc]['positions']
+                is_consecutive = self.check_consecutive(positions1, positions2)
+                if is_consecutive == False:
+                    is_valid = False
+                    break
+
+            if is_valid == True:
+                valid_docs.append(doc)
+            
+        return valid_docs
+    
+    def check_consecutive(arr1, arr2):
+        arr1_set = set(arr1)
+        # O(n) time complexity
+        for num in arr2:
+            if num - 1 in arr1_set:
+                return True
+        return False
 
     def is_phrase(self, string): 
         return string.count(' ') > 0
