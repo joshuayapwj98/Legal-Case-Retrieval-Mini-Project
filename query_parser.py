@@ -263,7 +263,7 @@ class QueryParser:
             
         return valid_docs
     
-    def check_consecutive(arr1, arr2):
+    def check_consecutive(self, arr1, arr2):
         arr1_set = set(arr1)
         # O(n) time complexity
         for num in arr2:
