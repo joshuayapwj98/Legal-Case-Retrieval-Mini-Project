@@ -38,7 +38,7 @@ def run_search(dict_file, postings_file, queries_file, results_file):
     # Pls implement your code in below
 
     postings_reader = PostingsReader()
-    postings_reader.get_postings_ptr('.')
+    postings_reader.get_postings_ptr('unauthor')
 
 dictionary_file = postings_file = file_of_queries = output_file_of_results = None
 
