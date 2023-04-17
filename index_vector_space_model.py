@@ -266,20 +266,20 @@ class VectorSpaceModel:
             new_posting = "{} {}{}\n".format(term, doc_freq, posting_content)
 
             posting_pointer.append(posting_ref)
-            posting_ref += len(new_posting)
+            posting_ref += len(new_posting.encode('utf-8'))
             final_postings += new_posting
 
             if (len(posting_pointer) < block_size):
-                dictionary_content = "|{}|{}".format(str(len(term)), term)
+                dictionary_content = "|{}|{}".format(str(len(term.encode('utf-8'))), term)
                 acc_dictionary_content += dictionary_content
             else:
-                dictionary_content = "|{}|{}".format(str(len(term)), term)
+                dictionary_content = "|{}|{}".format(str(len(term.encode('utf-8'))), term)
                 acc_dictionary_content += dictionary_content
                 final_dictionary += acc_dictionary_content
 
                 posting_ref_content = ','.join(str(e) for e in posting_pointer)
                 dict_post_pointer = " {},{}".format(dictionary_ref, posting_ref_content)
-                dictionary_ref += len(acc_dictionary_content)
+                dictionary_ref += len(acc_dictionary_content.encode('utf-8'))
                 final_pointers += dict_post_pointer
                 posting_pointer = list()
                 acc_dictionary_content = ""
@@ -302,7 +302,7 @@ class VectorSpaceModel:
         if (len(posting_pointer) != 0):
             posting_ref_content = ','.join(str(e) for e in posting_pointer)
             dict_post_pointer = " {},{}".format(dictionary_ref, posting_ref_content)
-            dictionary_ref = len(final_dictionary)
+            dictionary_ref = len(final_dictionary.encode('utf-8'))
             final_pointers += dict_post_pointer
             posting_pointer = list()
 

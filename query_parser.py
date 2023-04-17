@@ -9,11 +9,12 @@ from postings_reader import PostingsReader
 
 class Posting:
 
-    def __init__(self, context, occurrences, postings):
+    def __init__(self, context = "", occurrences = 0, postings = {}):
         self.context = context
         self.occurrences = occurrences
         self.postings = {}
-        self.parse_postings(postings)
+        if self.occurrences != 0:
+            self.parse_postings(postings)
 
     def parse_postings(self, postings):
         postings_list = postings.split(' ')
@@ -131,6 +132,7 @@ class QueryParser:
         for term in terms:
             w_tq = normalization_query_vectors[term]
             posting_obj = self.get_postings_list(term)
+            
             postings_list = posting_obj.postings
 
             for document_id in postings_list.keys():
@@ -148,23 +150,19 @@ class QueryParser:
     # ====================================================================
     
     def tokenize_query(self, query):
-        query = nltk.tokenize.word_tokenize(query.strip())
+        query = query.strip()
         terms = []
 
-        for term in query:
-            stemmed = self.stemmer.stem(term.lower())
-            terms.append(stemmed)
-        
+        for sentence_token in nltk.tokenize.sent_tokenize(query):
+            for word_token in nltk.tokenize.word_tokenize(sentence_token):
+                # stem and case-folding
+                word_token = self.stemmer.stem(word_token).lower()
+                if len(word_token) == 0:
+                    continue
+                else: terms.append(word_token)
+                
         return terms
-
-    def get_query_term_weight(self, query_term, termIndex, postings_list_len):
-        if postings_list_len == 0:
-            return 0
-        return (1 + math.log(termIndex[query_term], 10)) * math.log(self.N/postings_list_len, 10)
-
-    def get_document_term_weight(self, document_term_frequency):
-        return 1 + math.log(document_term_frequency, 10)
-
+    
     def get_query_normalization_vectors(self, term_dict):
         square_w_tq_list = []
         query_weight_dict = collections.defaultdict(lambda: 0)
@@ -229,13 +227,18 @@ class QueryParser:
         stemmed_token = self.stemmer.stem(term).lower()
         postings_list_ptr = self.postings_reader.get_postings_ptr(stemmed_token)
         with open('postings.txt', 'r') as f:
-            line = f.seek(postings_list_ptr, 0)
-            line = f.readline().strip()
-            context, occurrences, postings = line.split(' ', 2)
+            if postings_list_ptr == -1:
+                print('[DEBUG] Cannot find term', term)
+                posting = Posting(term)
+            else:
+                print('[DEBUG] Found term', term)
+                line = f.seek(postings_list_ptr, 0)
+                line = f.readline().strip()
+                context, occurrences, postings = line.split(' ', 2)
 
-            # Create a new Posting instance
-            posting = Posting(context, occurrences, postings)
-            # Postings.postings variable example: [{'doc_id': 246391, 'weight': 1.0, 'positions': [6]}, {'doc_id': 9, 'weight': 1.0, 'positions': [0]}]
+                # Create a new Posting instance
+                posting = Posting(context, occurrences, postings)
+                # Postings.postings variable example: [{'doc_id': 246391, 'weight': 1.0, 'positions': [6]}, {'doc_id': 9, 'weight': 1.0, 'positions': [0]}]
             return posting
     
     def get_document(self, file_name):
