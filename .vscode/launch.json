@@ -13,7 +13,7 @@
             "justMyCode": true,
             "args": ["-d", "dictionary.txt", "-p", "postings.txt", "-q", "queries", "-o", "results.txt"]
             // "args": ["-i", "/Users/joshuayap/nltk_data/corpora/reuters/sub_training", "-d", "dictionary.txt", "-p", "postings.txt"]
-            // "args": ["-i", "dataset_subset.csv", "-d", "dictionary.txt", "-p", "postings.txt"]
+            // "args": ["-i", "dataset_subset_2.csv", "-d", "dictionary.txt", "-p", "postings.txt"]
         }
     ]
 }

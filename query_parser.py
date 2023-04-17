@@ -7,6 +7,25 @@ import nltk
 from nltk.stem.porter import PorterStemmer
 from postings_reader import PostingsReader
 
+class Posting:
+
+    def __init__(self, context, occurrences, postings):
+        self.context = context
+        self.occurrences = occurrences
+        self.postings = {}
+        self.parse_postings(postings)
+
+    def parse_postings(self, postings):
+        postings_list = postings.split(' ')
+        last_doc_id = 0  # keep track of the last processed doc_id
+        for posting in postings_list:
+            parts = posting.split(':')
+            doc_id_increment, weight, *positions = parts[0].split(',')
+            doc_id = last_doc_id + int(doc_id_increment)
+            positions = list(map(int, [p.split(':')[0] for p in parts[1:]]))
+            self.postings[doc_id] = {'weight': float(weight), 'positions': positions}
+            last_doc_id = doc_id  # update the last processed doc_id
+
 class QueryParser:
 
     def __init__(self):
@@ -91,11 +110,9 @@ class QueryParser:
     '''
     def process_freetext_query(self, query):
         # Collection to count the occurences of a term in a query
-        queryIndex = collections.defaultdict(lambda: 0)
-        # Collection to store the query term weight
-        query_weight_dict = collections.defaultdict(lambda: 0)
+        query_count_dict = collections.defaultdict(lambda: 0)
 
-        score_dict = collections.defaultdict(lambda: 0)
+        score_dict = collections.defaultdict(float)
 
         # # Iterate through each term in the contextual query
         # q = query[0]
@@ -106,39 +123,31 @@ class QueryParser:
 
         terms = self.tokenize_query(query[0])
 
+
         for term in terms:
-            queryIndex[term] += 1
+            query_count_dict[term] += 1
 
-        square_val_list = []
-        for term in queryIndex:
-            postingList = self.get_postings_list(term)
-            query_term_weight = self.get_query_term_weight(term, queryIndex, len(postingList))
-            query_weight_dict[term] = query_term_weight
-            square_val_list.append(query_term_weight ** 2)
+        normalization_query_vectors = self.get_query_normalization_vectors(query_count_dict)
+
+        for term in terms:
+            w_tq = normalization_query_vectors[term]
+            posting_obj = self.get_postings_list(term)
+            postings_list = posting_obj.postings
+
+            for document_id, properties in postings_list.items():
+                w_td, positions = properties.values()
+
+                score_dict[document_id] += w_tq * w_td
         
-        square_val_list.sort()
-        square_sum = sum(square_val_list)
+        for document_id in score_dict:
+            score_dict[document_id] /= self.doc_lengths[document_id]
 
-        # Get the query normalization factor 
-        query_normalization_factor = math.sqrt(square_sum)
-
-        for term in queryIndex:
-            # get normalised query vector item
-            postingList = self.get_postings_list(term)
-            query_term_weight = query_weight_dict[term]
-            query_term_weight /= query_normalization_factor
-
-            # get normalised document vector item, then add score
-            for document_id in postingList:
-                currScore = self.doc_lengths[document_id] * query_term_weight
-                score_dict[document_id] += currScore
-        
         return self.get_top_K_components(score_dict, self.K)
     
     # ====================================================================
     # ====================== RANKING PROCESSING ==========================
     # ====================================================================
-
+    
     def tokenize_query(self, query):
         query = nltk.tokenize.word_tokenize(query.strip())
         terms = []
@@ -152,12 +161,40 @@ class QueryParser:
     def get_query_term_weight(self, query_term, termIndex, postings_list_len):
         if postings_list_len == 0:
             return 0
-        return (1 + math.log(termIndex[query_term], 10)) * math.log(self.N/postings_list_len)
+        return (1 + math.log(termIndex[query_term], 10)) * math.log(self.N/postings_list_len, 10)
 
     def get_document_term_weight(self, document_term_frequency):
         return 1 + math.log(document_term_frequency, 10)
+
+    def get_query_normalization_vectors(self, term_dict):
+        square_w_tq_list = []
+        query_weight_dict = collections.defaultdict(lambda: 0)
+        norm_query_weight_dict = {key: 0 for key in term_dict.keys()}
+
+        for term in term_dict:
+            if term not in query_weight_dict:
+                tf = idf = 0
+                posting_obj = self.get_postings_list(term)
+                occurrences = int(posting_obj.occurrences)
+
+                tf = 1 + math.log(term_dict[term], 10)
+
+                if occurrences != 0:
+                    idf = math.log(self.N/occurrences, 10)
+                
+                w_tq = tf * idf
+                query_weight_dict[term] = w_tq
+                square_w_tq_list.append(w_tq ** 2)
         
-    def get_top_K_components(scores_dic, K):
+        square_w_tq_list.sort()
+        query_normalization_factor = math.sqrt(sum(square_w_tq_list))
+
+        for term in term_dict:
+            norm_query_weight_dict[term] = query_weight_dict[term] / query_normalization_factor
+        
+        return norm_query_weight_dict
+
+    def get_top_K_components(self, scores_dic, K):
         result = []
         score_tuples = [(-score, doc_id) for doc_id, score in scores_dic.items()]
         
@@ -191,7 +228,16 @@ class QueryParser:
 
     def get_postings_list(self, term):
         stemmed_token = self.stemmer.stem(term).lower()
-        return self.postings_reader.get_postings_ptr(stemmed_token)
+        postings_list_ptr = self.postings_reader.get_postings_ptr(stemmed_token)
+        with open('postings.txt', 'r') as f:
+            line = f.seek(postings_list_ptr, 0)
+            line = f.readline().strip()
+            context, occurrences, postings = line.split(' ', 2)
+
+            # Create a new Posting instance
+            posting = Posting(context, occurrences, postings)
+            # Postings.postings variable example: [{'doc_id': 246391, 'weight': 1.0, 'positions': [6]}, {'doc_id': 9, 'weight': 1.0, 'positions': [0]}]
+            return posting
     
     def get_document(self, file_name):
         doc_length = dict()

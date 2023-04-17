@@ -55,7 +55,7 @@ class PostingsReader:
                     else: 
                         length_of_term += next_char
 
-                term = f.read(int(len(length_of_term)))
+                term = f.read(int(length_of_term))
 
                 if i == 0:
                     first_term = term
@@ -74,5 +74,5 @@ class PostingsReader:
                 left = mid + 1
         
         print("Term not found in dictionary...")
-        return -1 
+        return -1
 

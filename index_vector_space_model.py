@@ -42,7 +42,7 @@ class VectorSpaceModel:
         """
         total_docs = -1
         # max_docs = float('inf')
-        max_docs = 500
+        max_docs = 100
 
         all_doc = {}
         all_doc_ids = []
@@ -236,6 +236,7 @@ class VectorSpaceModel:
         final_dictionary = "" # term doc_freq reference
         final_postings = "" # term (docID,term_freq) (docID,term_freq) ...
         final_pointers = "" # (dict_ptr,posting_ptr,posting_ptr,posting_ptr,posting_ptr) ...
+        acc_dictionary_content = ""
         posting_ref = 0
         dictionary_ref = 0
         line_in_mem = 0
@@ -270,16 +271,18 @@ class VectorSpaceModel:
 
             if (len(posting_pointer) < block_size):
                 dictionary_content = "|{}|{}".format(str(len(term)), term)
-                final_dictionary += dictionary_content
+                acc_dictionary_content += dictionary_content
             else:
                 dictionary_content = "|{}|{}".format(str(len(term)), term)
-                final_dictionary += dictionary_content
+                acc_dictionary_content += dictionary_content
+                final_dictionary += acc_dictionary_content
 
                 posting_ref_content = ','.join(str(e) for e in posting_pointer)
                 dict_post_pointer = " {},{}".format(dictionary_ref, posting_ref_content)
-                dictionary_ref += len(dict_post_pointer)
+                dictionary_ref += len(acc_dictionary_content)
                 final_pointers += dict_post_pointer
                 posting_pointer = list()
+                acc_dictionary_content = ""
             
             # write out into dictionary and postings files
             if (line_in_mem == self.MAX_LINES_IN_MEM):
@@ -290,7 +293,7 @@ class VectorSpaceModel:
 
                 # reset values
                 line_in_mem = 0
-                final_dictionary = "" 
+                final_dictionary = ""
                 final_postings = ""
                 final_pointers = ""
         
