@@ -23,7 +23,8 @@ class Posting:
             parts = posting.split(':')
             doc_id_increment, weight = parts[0].split(',')
             doc_id = last_doc_id + int(doc_id_increment)
-            self.postings[doc_id] = float(weight)
+            positions = set([int(p) for p in parts[1].split(',')])
+            self.postings[doc_id] = {'weight': float(weight), 'positions': positions}
             last_doc_id = doc_id  # update the last processed doc_id
 
 class QueryParser:
@@ -135,8 +136,8 @@ class QueryParser:
             
             postings_list = posting_obj.postings
 
-            for document_id in postings_list.keys():
-                w_td = postings_list[document_id]
+            for document_id, props in postings_list.items():
+                w_td = props['weight']
 
                 score_dict[document_id] += w_tq * w_td
         
