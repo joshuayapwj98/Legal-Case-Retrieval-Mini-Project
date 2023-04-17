@@ -115,21 +115,15 @@ class QueryParser:
 
         score_dict = collections.defaultdict(float)
 
-        # # Iterate through each term in the contextual query
-        # q = query[0]
-        # words = re.findall(r'(\w+|"[^"]+")', q)
-
-        # # Remove the quotes from the words in double quotes
-        # words = [word.strip('"') for word in words]
-
         terms = self.tokenize_query(query[0])
-
 
         for term in terms:
             query_count_dict[term] += 1
 
+        # Get normalization query vectors
         normalization_query_vectors = self.get_query_normalization_vectors(query_count_dict)
 
+        # Calculate the scores of each term w.r.t document
         for term in terms:
             w_tq = normalization_query_vectors[term]
             posting_obj = self.get_postings_list(term)
@@ -141,9 +135,11 @@ class QueryParser:
 
                 score_dict[document_id] += w_tq * w_td
         
+        # Normalize score with document length
         for document_id in score_dict:
             score_dict[document_id] /= self.doc_lengths[document_id]
 
+        # Get top K documents
         return self.get_top_K_components(score_dict, self.K)
     
     # ====================================================================
