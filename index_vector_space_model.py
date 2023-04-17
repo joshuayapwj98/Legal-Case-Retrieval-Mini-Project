@@ -119,7 +119,7 @@ class VectorSpaceModel:
         stemmer = PorterStemmer()
         all_doc_ids, title, content, date_posted, court = self.parse_data()
         total_num_docs = len(all_doc_ids)
-        terms = list() # a list of terms
+        terms = {} # a list of terms
         term_doc_freq = {} # key: string, value: int { term : doc_freq }
         term_id_pos = {} # { term : { docID : [position...] } }
         postings = {} # key: string, value: a dictionary { term : {docID : term_freq, docID : term_freq ...} }
@@ -132,7 +132,7 @@ class VectorSpaceModel:
                 print("time taken: " + str(end - st))
 
             doc_id = str(doc_id)
-            terms_counted = list() # list of terms in doc_id already counted in doc_freq
+            terms_counted = {} # list of terms in doc_id already counted in doc_freq
             position = 0 # positional index
             doc_content = content[doc_id].split("\n")
             for line in doc_content:
@@ -147,14 +147,14 @@ class VectorSpaceModel:
                             # first unique instance of term in all docs
                             # add word_token into list of terms
                             if word_token not in terms:
-                                terms.append(word_token)
+                                terms[word_token] = 1
                                 term_doc_freq[word_token] = 1 # { term : doc_freq }
-                                terms_counted.append(word_token)
+                                terms_counted[word_token] = 1
 
                             # check if doc_id is counted in doc_freq
                             if word_token not in terms_counted:
                                 term_doc_freq[word_token] += 1 # { term : doc_freq }
-                                terms_counted.append(word_token)
+                                terms_counted[word_token] = 1
                             
                             # add word_token into posting list
                             # value as { term : docID : [position...]}
@@ -172,7 +172,7 @@ class VectorSpaceModel:
             count += 1
         
         doc_len, postings = self.construct_weighted_postings(all_doc_ids, term_id_pos)
-        terms.sort()
+        dict(sorted(terms.items()))
         self.write_output_files(terms, term_doc_freq, postings)
         self.write_output_document(total_num_docs, doc_len)
 
