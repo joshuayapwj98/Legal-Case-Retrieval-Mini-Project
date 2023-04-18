@@ -39,8 +39,8 @@ class VectorSpaceModel:
                 
         """
         total_docs = -1
-        max_docs = float('inf')
-        # max_docs = 100
+        # max_docs = float('inf')
+        max_docs = 100
 
         all_doc = {}
         all_doc_ids = []

@@ -26,7 +26,12 @@ class Posting:
             parts = posting.split(':')
             doc_id_increment, weight = parts[0].split(',')
             doc_id = last_doc_id + int(doc_id_increment)
-            positions = set([int(p) for p in parts[1].split(',')])
+            positions = set()
+            last_position = 0
+            for p in parts[1].split(','):
+                position = last_position + int(p)
+                positions.add(position)
+                last_position = position
             self.postings[doc_id] = {'weight': float(weight), 'positions': positions}
             last_doc_id = doc_id  # update the last processed doc_id
 
@@ -39,6 +44,7 @@ class QueryParser:
         self.doc_lengths = dict()
         self.postings_reader = PostingsReader()
         self.stemmer = PorterStemmer()
+        self.term_weights_dict = collections.defaultdict()
 
     def process_query(self, query, K):
         self.K = K
@@ -146,9 +152,12 @@ class QueryParser:
 
         # Get top K documents
         top_documents = self.get_top_K_components(score_dict, self.K)
-        # Start of Relevance Feedback
-        new_query_vectors = self.rocchio(normalization_query_vectors, top_documents)
 
+        # Start of Pseudo Relevance Feedback (RF)
+        # TODO: Get top scores and use it to append it to the query for a new free_text search
+        # Use the top M documents from the rocchio
+        new_query_vectors = self.rocchio(normalization_query_vectors, top_documents)
+        
         return top_documents
     
     # ====================================================================
@@ -261,7 +270,7 @@ class QueryParser:
         
         # Calculate the average weight of the a term across all non relevant documents 
         for term in anti_centroid_weights:
-            anti_centroid_weights[term] /= (len(docs_id_set) - len(relevant_docs))
+            anti_centroid_weights[term] /= (len(docs_id_set) - num_relevant_docs)   
 
         # Calculate the Rocchio algorithm
         for term, weight in normalized_query_vectors.items():
@@ -274,7 +283,6 @@ class QueryParser:
             query_centroid[term] -= gamma * weight
 
         return query_centroid
-        
 
     # ==========================================================================
     # ====================== PHRASAL QUERY PROCESSING ==========================
