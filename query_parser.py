@@ -26,11 +26,11 @@ class Posting:
             parts = posting.split(':')
             doc_id_increment, weight = parts[0].split(',')
             doc_id = last_doc_id + int(doc_id_increment)
-            positions = set()
+            positions = []
             last_position = 0
             for p in parts[1].split(','):
                 position = last_position + int(p)
-                positions.add(position)
+                positions.append(position)
                 last_position = position
             self.postings[doc_id] = {'weight': float(weight), 'positions': positions}
             last_doc_id = doc_id  # update the last processed doc_id
