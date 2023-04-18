@@ -10,6 +10,13 @@ import time
 from nltk.stem.porter import PorterStemmer
 from postings_reader import PostingsReader
 
+nltk.download('wordnet')
+nltk.download('stopwords')
+
+from nltk.corpus import wordnet
+from nltk.corpus import stopwords
+from string import punctuation
+
 class Posting:
 
     def __init__(self, context = "", occurrences = 0, postings = {}):
@@ -55,7 +62,20 @@ class QueryParser:
         if 'AND' in query[0]:
             results = self.process_boolean_query(query)
         else:
-            results = self.process_freetext_query(query)
+            normalization_query_vectors, top_documents = self.process_freetext_query(query)
+            other_relevant_docs = [doc_id for doc_id in query[1:]]
+            for doc_id in other_relevant_docs:
+                top_documents.append(int(doc_id))
+            # Start of Pseudo Relevance Feedback (RF)
+            new_query_vectors = self.rocchio(normalization_query_vectors, top_documents)
+            top_new_terms = self.get_top_K_components(new_query_vectors, 1000)
+            # Perform filtering and query optimzation with WordNet
+            new_query_terms = self.filter_relevant_words(self.tokenize_query(query[0]), top_new_terms)
+            # Curate a new revised query
+            revised_query = query[0] + ' ' + ' '.join(new_query_terms)
+
+            normalization_query_vectors, top_documents = self.process_freetext_query(revised_query)
+            results = top_documents
 
         return results
 
@@ -153,12 +173,7 @@ class QueryParser:
         # Get top K documents
         top_documents = self.get_top_K_components(score_dict, self.K)
 
-        # Start of Pseudo Relevance Feedback (RF)
-        # TODO: Get top scores and use it to append it to the query for a new free_text search
-        # Use the top M documents from the rocchio
-        new_query_vectors = self.rocchio(normalization_query_vectors, top_documents)
-        
-        return top_documents
+        return normalization_query_vectors, top_documents
     
     # ====================================================================
     # ====================== RANKING PROCESSING ==========================
@@ -233,6 +248,33 @@ class QueryParser:
 
         return result
     
+    # ===========================================================================
+    # ====================== QUERY EXPANSION TECHNIQUE ==========================
+    # ===========================================================================
+
+    def filter_relevant_words(self, query, terms):
+        relevant_synonyms = self.word_net(query)
+        stop_words = set(stopwords.words('english'))
+        punc = set(punctuation)
+
+        filtered_words = [term for term in terms if term not in stop_words \
+                          and term not in punc \
+                            and term in relevant_synonyms \
+                                and term not in query]
+        
+        print('filtered words', filtered_words)
+        return filtered_words
+
+    def word_net(self, query):
+        # Find synonyms for each word in the query
+        synonyms = set()
+        for word in query:
+            for synset in wordnet.synsets(word):
+                synonyms.update(synset.lemma_names())
+
+        print("Synonyms:", synonyms)
+        return synonyms
+
     def rocchio(self, normalized_query_vectors, relevant_docs, alpha=0.85, beta=0.1, gamma=0.05):
         docs_id_set = set()
         
