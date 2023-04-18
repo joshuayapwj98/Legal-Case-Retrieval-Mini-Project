@@ -10,11 +10,12 @@ from postings_reader import PostingsReader
 
 class Posting:
 
-    def __init__(self, context, occurrences, postings):
+    def __init__(self, context = "", occurrences = 0, postings = {}):
         self.context = context
         self.occurrences = occurrences
         self.postings = {}
-        self.parse_postings(postings)
+        if self.occurrences != 0:
+            self.parse_postings(postings)
 
     def parse_postings(self, postings):
         postings_list = postings.split(' ')
@@ -23,7 +24,8 @@ class Posting:
             parts = posting.split(':')
             doc_id_increment, weight = parts[0].split(',')
             doc_id = last_doc_id + int(doc_id_increment)
-            self.postings[doc_id] = float(weight)
+            positions = set([int(p) for p in parts[1].split(',')])
+            self.postings[doc_id] = {'weight': float(weight), 'positions': positions}
             last_doc_id = doc_id  # update the last processed doc_id
 
 class QueryParser:
@@ -72,9 +74,11 @@ class QueryParser:
         # Process phrasal queries
         for t in terms:
             t = t.strip('"')
+            postings_result_set = set()
             if self.is_phrase(t):
-                postings_result = self.process_phrase(t)
-                phrasal_terms[t] = postings_result
+                terms = self.tokenize_boolean_query(t)
+                postings_result_set = self.process_phrase(terms)
+                # phrasal_terms[t] = postings_result
                 # query_terms[t] = postings_result.count() --> len of docIDs
 
             else: 
@@ -114,50 +118,63 @@ class QueryParser:
 
         score_dict = collections.defaultdict(float)
 
-        # # Iterate through each term in the contextual query
-        # q = query[0]
-        # words = re.findall(r'(\w+|"[^"]+")', q)
-
-        # # Remove the quotes from the words in double quotes
-        # words = [word.strip('"') for word in words]
-
         terms = self.tokenize_query(query[0])
-
 
         for term in terms:
             query_count_dict[term] += 1
 
+        # Get normalization query vectors
         normalization_query_vectors = self.get_query_normalization_vectors(query_count_dict)
 
+        # Calculate the scores of each term w.r.t document
         for term in terms:
             w_tq = normalization_query_vectors[term]
             posting_obj = self.get_postings_list(term)
+            
             postings_list = posting_obj.postings
 
-            for document_id in postings_list.keys():
-                w_td = postings_list[document_id]
+            for document_id, props in postings_list.items():
+                w_td = props['weight']
 
                 score_dict[document_id] += w_tq * w_td
         
+        # Normalize score with document length
         for document_id in score_dict:
             score_dict[document_id] /= self.doc_lengths[document_id]
 
+        # Get top K documents
         return self.get_top_K_components(score_dict, self.K)
     
     # ====================================================================
     # ====================== RANKING PROCESSING ==========================
     # ====================================================================
     
+    def tokenize_boolean_query(self, terms):
+        tokenized_terms = []
+
+        for term in terms.split(' '):
+            # stem and case-folding
+            word_token = self.stemmer.stem(term).lower()
+            if len(word_token) == 0:
+                continue
+            else: tokenized_terms.append(word_token)
+        
+        return tokenized_terms
+
     def tokenize_query(self, query):
-        query = nltk.tokenize.word_tokenize(query.strip())
+        query = query.strip()
         terms = []
 
-        for term in query:
-            stemmed = self.stemmer.stem(term.lower())
-            terms.append(stemmed)
-        
+        for sentence_token in nltk.tokenize.sent_tokenize(query):
+            for word_token in nltk.tokenize.word_tokenize(sentence_token):
+                # stem and case-folding
+                word_token = self.stemmer.stem(word_token).lower()
+                if len(word_token) == 0:
+                    continue
+                else: terms.append(word_token)
+                
         return terms
-
+    
     def get_query_normalization_vectors(self, term_dict):
         square_w_tq_list = []
         query_weight_dict = collections.defaultdict(lambda: 0)
@@ -233,7 +250,52 @@ class QueryParser:
     relevant.  
     '''
     def process_phrase(self, phrase):
-        return
+        postings_dict = {}
+        postings = []
+
+        # 1. Obtain the postings for each term
+        for term in phrase:
+            posting = self.get_postings_list(term)
+            if len(posting.postings) != 0:
+                postings_map = posting.postings
+                postings_dict[term] = postings_map
+                postings.append(set(postings_map.keys()))
+            else:
+                # postings.append(set())
+                # TODO: Check if returning an empty list since a term is not present in any document
+                return []
+        
+        # 2. Find the common documents from the set of document IDs
+        common_docs = postings[0]
+        for i in range(1, len(postings)):
+            common_docs = common_docs & postings[i]
+
+        valid_docs = set()
+        # 3. For each common document, check document(s) for the term sequence
+        for doc in common_docs:
+            
+            is_valid = True
+
+            for i in range(0, len(phrase) - 1):
+                positions1 = postings_dict[phrase[i]][doc]['positions']
+                positions2 = postings_dict[phrase[i+1]][doc]['positions']
+                is_consecutive = self.check_consecutive(positions1, positions2)
+                if is_consecutive == False:
+                    is_valid = False
+                    break
+
+            if is_valid == True:
+                valid_docs.add(doc)
+            
+        return valid_docs
+    
+    def check_consecutive(self, arr1, arr2):
+        arr1_set = set(arr1)
+        # O(n) time complexity
+        for num in arr2:
+            if num - 1 in arr1_set:
+                return True
+        return False
 
     def is_phrase(self, string): 
         return string.count(' ') > 0
@@ -243,16 +305,20 @@ class QueryParser:
     # ==========================================================================
 
     def get_postings_list(self, term):
-        stemmed_token = self.stemmer.stem(term).lower()
-        postings_list_ptr = self.postings_reader.get_postings_ptr(stemmed_token)
+        postings_list_ptr = self.postings_reader.get_postings_ptr(term)
         with open('postings.txt', 'r') as f:
-            line = f.seek(postings_list_ptr, 0)
-            line = f.readline().strip()
-            context, occurrences, postings = line.split(' ', 2)
+            if postings_list_ptr == -1:
+                print('[DEBUG] Cannot find term', term)
+                posting = Posting(term)
+            else:
+                print('[DEBUG] Found term', term)
+                line = f.seek(postings_list_ptr, 0)
+                line = f.readline().strip()
+                context, occurrences, postings = line.split(' ', 2)
 
-            # Create a new Posting instance
-            posting = Posting(context, occurrences, postings)
-            # Postings.postings variable example: [{'doc_id': 246391, 'weight': 1.0, 'positions': [6]}, {'doc_id': 9, 'weight': 1.0, 'positions': [0]}]
+                # Create a new Posting instance
+                posting = Posting(context, occurrences, postings)
+                # Postings.postings variable example: [{'doc_id': 246391, 'weight': 1.0, 'positions': [6]}, {'doc_id': 9, 'weight': 1.0, 'positions': [0]}]
             return posting
     
     def get_document(self, file_name):
