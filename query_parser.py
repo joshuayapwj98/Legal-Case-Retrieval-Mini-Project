@@ -105,44 +105,54 @@ class QueryParser:
 
         # Split the query string into terms using 'AND' as the delimiter
         terms = query[0].split(' AND ')
+        print(terms)
 
         # 1. Go through the entire query and put it into a py dict.
         # Put phrasal queries in a separate dictionary, where the key is the phrasal query and the value is the postings list. 
-        phrasal_terms = {} # Key: term, Value: postings list
-        query_terms = {} # Key: term, Value: doc_freq
+        terms_postings_list = {} # Key: term, Value: postings list
+        terms_doc_freq = {} # Key: term, Value: doc_freq
         
         # Process phrasal queries
         for t in terms:
             t = t.strip('"')
             postings_result_set = set()
             if self.is_phrase(t):
-                terms = self.tokenize_boolean_query(t)
-                postings_result_set = self.process_phrase(terms)
-                # phrasal_terms[t] = postings_result
-                # query_terms[t] = postings_result.count() --> len of docIDs
+                phrasal_terms = self.tokenize_boolean_query(t) # Returns a list of up to 3 terms (phrase)
+                print(phrasal_terms)
+                postings_result_set = self.process_phrase(phrasal_terms)
+                print("These are the results:", postings_result_set)
+                
+                # Add to temp dictionaries to do AND operations
+                print(t, postings_result_set)
+                terms_postings_list[t] = postings_result_set
+                terms_doc_freq[t] = len(postings_result_set)
 
             else: 
                 # Put the term's doc_feq in the query_terms dict
-                pass
-
+                term = self.tokenize_boolean_query(t)
+                postings_list = self.get_postings_list(term[0]).postings
+                terms_postings_list[t] = set(postings_list.keys())
+                terms_doc_freq[t] = len(set(postings_list.keys()))
         
+        print(terms_postings_list)
+        print(terms_doc_freq)
+
         # 2. Loop, maintaining a stack of size 2 to operate 'AND' on.
         self_combining_stack = Stack()
-        while query_terms: 
+        while terms_doc_freq: 
             
             # 2a. Pop the smallest value in the dictionary, get the postings list of the key, and add it to the stack. 
-            min_key = min(query_terms, key=query_terms.get)
-            postings_list = self.get_postings_list(min_key)
+            min_key = min(terms_doc_freq, key=terms_doc_freq.get)
+            print(min_key)
+            postings_list = terms_postings_list[min_key]
+            print(postings_list)
+            terms_doc_freq.pop(min_key)
 
             # 2b. Add to operator stack
             self_combining_stack.push(postings_list)
             
-        common_docs = []
-        if not self_combining_stack.isEmpty():
-            common_docs.append(self_combining_stack.pop())
-
+        common_docs = self_combining_stack.pop()
         return common_docs
-    
 
     # ======================================================================
     # ====================== FREE TEXT PROCESSING ==========================
@@ -376,7 +386,7 @@ class QueryParser:
             else:
                 # postings.append(set())
                 # TODO: Check if returning an empty list since a term is not present in any document
-                return []
+                return set()
         
         # 2. Find the common documents from the set of document IDs
         common_docs = postings[0]
