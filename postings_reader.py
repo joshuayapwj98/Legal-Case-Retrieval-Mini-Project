@@ -84,7 +84,7 @@ class PostingsReader:
                 left = mid + 1
 
             # Terminating clause when term is not found...
-            if right - left == 1:
+            else: 
                 break
         
         print("Term not found in dictionary...")
