@@ -105,7 +105,7 @@ class QueryParser:
 
         # Split the query string into terms using 'AND' as the delimiter
         terms = query[0].split(' AND ')
-        print(terms)
+        # print(terms)
 
         # 1. Go through the entire query and put it into a py dict.
         # Put phrasal queries in a separate dictionary, where the key is the phrasal query and the value is the postings list. 
@@ -118,12 +118,12 @@ class QueryParser:
             postings_result_set = set()
             if self.is_phrase(t):
                 phrasal_terms = self.tokenize_boolean_query(t) # Returns a list of up to 3 terms (phrase)
-                print(phrasal_terms)
+                # print(phrasal_terms)
                 postings_result_set = self.process_phrase(phrasal_terms)
-                print("These are the results:", postings_result_set)
+                # print("These are the results:", postings_result_set)
                 
                 # Add to temp dictionaries to do AND operations
-                print(t, postings_result_set)
+                # print(t, postings_result_set)
                 terms_postings_list[t] = postings_result_set
                 terms_doc_freq[t] = len(postings_result_set)
 
@@ -134,8 +134,8 @@ class QueryParser:
                 terms_postings_list[t] = set(postings_list.keys())
                 terms_doc_freq[t] = len(set(postings_list.keys()))
         
-        print(terms_postings_list)
-        print(terms_doc_freq)
+        # print(terms_postings_list)
+        # print(terms_doc_freq)
 
         # 2. Loop, maintaining a stack of size 2 to operate 'AND' on.
         self_combining_stack = Stack()
@@ -143,9 +143,9 @@ class QueryParser:
             
             # 2a. Pop the smallest value in the dictionary, get the postings list of the key, and add it to the stack. 
             min_key = min(terms_doc_freq, key=terms_doc_freq.get)
-            print(min_key)
+            # print(min_key)
             postings_list = terms_postings_list[min_key]
-            print(postings_list)
+            # print(postings_list)
             terms_doc_freq.pop(min_key)
 
             # 2b. Add to operator stack
@@ -442,10 +442,10 @@ class QueryParser:
         postings_list_ptr = self.postings_reader.get_postings_ptr(term)
         with open('postings.txt', 'r') as f:
             if postings_list_ptr == -1:
-                print('[DEBUG] Cannot find term', term)
+                # print('[DEBUG] Cannot find term', term)
                 posting = Posting(term)
             else:
-                print('[DEBUG] Found term', term)
+                # print('[DEBUG] Found term', term)
                 line = f.seek(postings_list_ptr, 0)
                 line = f.readline().strip()
                 context, occurrences, postings = line.split(' ', 2)
