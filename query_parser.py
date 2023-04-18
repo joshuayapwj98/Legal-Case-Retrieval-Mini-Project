@@ -63,18 +63,30 @@ class QueryParser:
             results = self.process_boolean_query(query)
         else:
             normalization_query_vectors, top_documents = self.process_freetext_query(query)
-            other_relevant_docs = [doc_id for doc_id in query[1:]]
-            for doc_id in other_relevant_docs:
-                top_documents.append(int(doc_id))
-            # Start of Pseudo Relevance Feedback (RF)
+            # TESTING
+            # top_documents = []
+            if len(query) > 1:
+                other_relevant_docs = [doc_id for doc_id in query[1:]]
+                for doc_id in other_relevant_docs:
+                    top_documents.append(int(doc_id))
+            # First optimization: Start of Pseudo Relevance Feedback (RF)
             new_query_vectors = self.rocchio(normalization_query_vectors, top_documents)
-            top_new_terms = self.get_top_K_components(new_query_vectors, 1000)
-            # Perform filtering and query optimzation with WordNet
-            new_query_terms = self.filter_relevant_words(self.tokenize_query(query[0]), top_new_terms)
-            # Curate a new revised query
-            revised_query = query[0] + ' ' + ' '.join(new_query_terms)
+            top_term_vectors = self.get_top_K_word_vectors(new_query_vectors, 100)
+            # new_query_terms = self.filter_relevant_words(self.tokenize_query(query[0]), top_term_vectors, False)
+            
+            # Second optimization: Perform filtering and query optimzation with WordNet
+            # new_query_terms = self.filter_relevant_words(self.tokenize_query(query[0]), top_term_vectors)
+            
+            # Update query terms into normalization_query_vectors
+            for term in top_term_vectors:
+                normalization_query_vectors[term[1]] = term[0]
 
-            normalization_query_vectors, top_documents = self.process_freetext_query(revised_query)
+            # Create new revised query
+            # revised_query = query[0]
+            # for term in top_term_vectors:
+            #     revised_query += ' ' + term[1]
+
+            normalization_query_vectors, top_documents = self.process_freetext_query(query, normalization_query_vectors)
             results = top_documents
 
         return results
@@ -140,7 +152,7 @@ class QueryParser:
     - quiet phone call
     - good grades exchange scandal
     '''
-    def process_freetext_query(self, query):
+    def process_freetext_query(self, query, normalization_query_vectors = []):
         # Collection to count the occurences of a term in a query
         query_count_dict = collections.defaultdict(lambda: 0)
 
@@ -151,8 +163,9 @@ class QueryParser:
         for term in terms:
             query_count_dict[term] += 1
 
-        # Get normalization query vectors
-        normalization_query_vectors = self.get_query_normalization_vectors(query_count_dict)
+        if len(normalization_query_vectors) == 0:
+            # Get normalization query vectors
+            normalization_query_vectors = self.get_query_normalization_vectors(query_count_dict)
 
         # Calculate the scores of each term w.r.t document
         for term in terms:
@@ -233,6 +246,21 @@ class QueryParser:
         
         return norm_query_weight_dict
 
+    def get_top_K_word_vectors(self, scores_dic, K):
+        result = []
+        score_tuples = [(-score, doc_id) for doc_id, score in scores_dic.items()]
+        
+        heapq.heapify(score_tuples)
+
+        for i in range(K):
+            if len(score_tuples) != 0:
+                tuple_result = heapq.heappop(score_tuples)
+                result.append((abs(tuple_result[0]),) + tuple_result[1:])
+            else:
+                break
+
+        return result
+    
     def get_top_K_components(self, scores_dic, K):
         result = []
         score_tuples = [(-score, doc_id) for doc_id, score in scores_dic.items()]
@@ -252,18 +280,19 @@ class QueryParser:
     # ====================== QUERY EXPANSION TECHNIQUE ==========================
     # ===========================================================================
 
-    def filter_relevant_words(self, query, terms):
-        relevant_synonyms = self.word_net(query)
-        stop_words = set(stopwords.words('english'))
-        punc = set(punctuation)
-
-        filtered_words = [term for term in terms if term not in stop_words \
-                          and term not in punc \
-                            and term in relevant_synonyms \
-                                and term not in query]
+    # def filter_relevant_words(self, query, terms, use_word_net = True):
+    #     stop_words = set(stopwords.words('english'))
+    #     punc = set(punctuation)
         
-        print('filtered words', filtered_words)
-        return filtered_words
+    #     filtered_words = [term for term in terms if term[1] not in stop_words \
+    #                       and term[1] not in punc \
+    #                         and term[1] not in query]
+        
+    #     if use_word_net == True:
+    #         relevant_synonyms = self.word_net(query)
+    #         filtered_words = [term for term in terms if term[1] in relevant_synonyms]
+        
+    #     return filtered_words
 
     def word_net(self, query):
         # Find synonyms for each word in the query
@@ -275,7 +304,7 @@ class QueryParser:
         print("Synonyms:", synonyms)
         return synonyms
 
-    def rocchio(self, normalized_query_vectors, relevant_docs, alpha=0.85, beta=0.1, gamma=0.05):
+    def rocchio(self, normalized_query_vectors, relevant_docs, alpha=1, beta=0.70, gamma=0.05):
         docs_id_set = set()
         
         centroid_weights = collections.defaultdict(float)
