@@ -3,6 +3,9 @@ import math
 import heapq
 import collections
 import nltk
+import numpy as np
+
+import time
 
 from nltk.stem.porter import PorterStemmer
 from postings_reader import PostingsReader
@@ -23,7 +26,12 @@ class Posting:
             parts = posting.split(':')
             doc_id_increment, weight = parts[0].split(',')
             doc_id = last_doc_id + int(doc_id_increment)
-            positions = set([int(p) for p in parts[1].split(',')])
+            positions = []
+            last_position = 0
+            for p in parts[1].split(','):
+                position = last_position + int(p)
+                positions.append(position)
+                last_position = position
             self.postings[doc_id] = {'weight': float(weight), 'positions': positions}
             last_doc_id = doc_id  # update the last processed doc_id
 
@@ -36,6 +44,7 @@ class QueryParser:
         self.doc_lengths = dict()
         self.postings_reader = PostingsReader()
         self.stemmer = PorterStemmer()
+        self.term_weights_dict = collections.defaultdict()
 
     def process_query(self, query, K):
         self.K = K
@@ -152,7 +161,14 @@ class QueryParser:
             score_dict[document_id] /= self.doc_lengths[document_id]
 
         # Get top K documents
-        return self.get_top_K_components(score_dict, self.K)
+        top_documents = self.get_top_K_components(score_dict, self.K)
+
+        # Start of Pseudo Relevance Feedback (RF)
+        # TODO: Get top scores and use it to append it to the query for a new free_text search
+        # Use the top M documents from the rocchio
+        new_query_vectors = self.rocchio(normalization_query_vectors, top_documents)
+        
+        return top_documents
     
     # ====================================================================
     # ====================== RANKING PROCESSING ==========================
@@ -226,6 +242,57 @@ class QueryParser:
                 break
 
         return result
+    
+    def rocchio(self, normalized_query_vectors, relevant_docs, alpha=0.85, beta=0.1, gamma=0.05):
+        docs_id_set = set()
+        
+        centroid_weights = collections.defaultdict(float)
+        anti_centroid_weights = collections.defaultdict(float)
+        query_centroid = collections.defaultdict(float)
+
+        num_relevant_docs = len(relevant_docs)
+
+        # Takes approx. 0.3 seconds for 10000+ dictionary terms
+        term_weights_dict = self.get_all_doc_weights()
+
+        # Find the weights of the the terms inside the relevant documents
+        for term, posting in term_weights_dict.items():
+            # postings_dict is a dictionary that has the doc_id as key and an object containing the weight and positions
+            # Example for the word 'inform':
+            # 1. '12323': {'weight': 1.2323, 'positions': [12, 356, 2234]}
+            postings_dict = posting.postings
+            for doc_id, props in postings_dict.items():
+                weight = props['weight']
+                # Add to set of document collection
+                if doc_id not in docs_id_set:
+                    docs_id_set.add(doc_id)
+
+                if doc_id in relevant_docs:
+                    # Add to relevant centroid weights
+                    centroid_weights[term] += weight
+                else: 
+                    # Add to non-relevant centroid weights
+                    anti_centroid_weights[term] += weight
+
+        # Calculate the average weight of the a term across all relevant documents 
+        for term in centroid_weights:
+            centroid_weights[term] /= num_relevant_docs
+        
+        # Calculate the average weight of the a term across all non relevant documents 
+        for term in anti_centroid_weights:
+            anti_centroid_weights[term] /= (len(docs_id_set) - num_relevant_docs)   
+
+        # Calculate the Rocchio algorithm
+        for term, weight in normalized_query_vectors.items():
+            query_centroid[term] = alpha * weight
+
+        for term, weight in centroid_weights.items():
+            query_centroid[term] += beta * weight
+
+        for term, weight in anti_centroid_weights.items():
+            query_centroid[term] -= gamma * weight
+
+        return query_centroid
 
     # ==========================================================================
     # ====================== PHRASAL QUERY PROCESSING ==========================
@@ -288,6 +355,17 @@ class QueryParser:
     # ==========================================================================
     # ====================== ACCESS INDEXING ===================================
     # ==========================================================================
+
+    def get_all_doc_weights(self):
+        doc_weights_dic = collections.defaultdict()
+        with open('Postings.txt', 'r') as f:
+            for line in f:
+                line = line.strip()
+                context, occurrences, postings = line.split(' ', 2)
+                posting = Posting(context, occurrences, postings)
+                doc_weights_dic[context] = posting
+        
+        return doc_weights_dic
 
     def get_postings_list(self, term):
         postings_list_ptr = self.postings_reader.get_postings_ptr(term)
