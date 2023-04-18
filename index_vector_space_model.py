@@ -39,8 +39,8 @@ class VectorSpaceModel:
                 
         """
         total_docs = -1
-        # max_docs = float('inf')
-        max_docs = 100
+        max_docs = float('inf')
+        # max_docs = 100
 
         all_doc = {}
         all_doc_ids = []
@@ -71,7 +71,7 @@ class VectorSpaceModel:
                     all_doc[data[0]] = data[1:]
 
         # sort data in increasing doc_id
-        dict(sorted(all_doc.items()))
+        all_doc = dict(sorted(all_doc.items()))
 
         for key in all_doc:
             all_doc_ids.append(key)
@@ -172,7 +172,7 @@ class VectorSpaceModel:
             count += 1
         
         doc_len, postings = self.construct_weighted_postings(all_doc_ids, term_id_pos)
-        dict(sorted(terms.items()))
+        terms = dict(sorted(terms.items()))
         self.write_output_files(terms, term_doc_freq, postings)
         self.write_output_document(total_num_docs, doc_len)
 
@@ -196,7 +196,6 @@ class VectorSpaceModel:
 
         # normalise term frequency for each document
         for term in term_id_pos: # { term : docID : [position...]}
-
             for doc_id in term_id_pos[term]:
                 term_freq = len(term_id_pos[term][doc_id])
                 log_term_freq_weighted = 1 + math.log(term_freq, 10)
@@ -254,8 +253,14 @@ class VectorSpaceModel:
                 doc_id = int(docID_weighted[0])
                 gap_encoded_id = doc_id - prev_id
                 weightedtf = str(docID_weighted[1])
-                position = ','.join(str(e) for e in positions)
 
+                position = ""
+                prev_pos = 0
+                for pos in positions:
+                    position += str(pos-prev_pos) + ","
+                    prev_pos = pos
+
+                position = position[:-1] # remove last comma
                 posting_content += " {},{}:{}".format(gap_encoded_id, weightedtf, position)
 
                 prev_id = doc_id
