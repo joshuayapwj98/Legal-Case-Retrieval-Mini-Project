@@ -7,6 +7,10 @@ import numpy as np
 
 import time
 
+import multiprocessing
+import threading
+import queue
+
 from nltk.stem.porter import PorterStemmer
 from postings_reader import PostingsReader
 
@@ -62,9 +66,11 @@ class QueryParser:
         if 'AND' in query[0]:
             results = self.process_boolean_query(query)
         else:
-            normalization_query_vectors, top_documents = self.process_freetext_query(query)
+            normalization_query_vectors, score_dict = self.process_freetext_query(query)
+            # Get top K documents
+            top_documents = self.get_top_K_components(score_dict, self.K)
             # TESTING
-            # top_documents = []
+            # top_documents = []    
             if len(query) > 1:
                 other_relevant_docs = [doc_id for doc_id in query[1:]]
                 for doc_id in other_relevant_docs:
@@ -86,7 +92,8 @@ class QueryParser:
             # for term in top_term_vectors:
             #     revised_query += ' ' + term[1]
 
-            normalization_query_vectors, top_documents = self.process_freetext_query(query, normalization_query_vectors)
+            normalization_query_vectors, score_dict = self.process_freetext_query(query, normalization_query_vectors)
+            top_documents = self.get_top_K_components(score_dict, self.N)
             results = top_documents
 
         return results
@@ -193,10 +200,7 @@ class QueryParser:
         for document_id in score_dict:
             score_dict[document_id] /= self.doc_lengths[document_id]
 
-        # Get top K documents
-        top_documents = self.get_top_K_components(score_dict, self.K)
-
-        return normalization_query_vectors, top_documents
+        return normalization_query_vectors, score_dict
     
     # ====================================================================
     # ====================== RANKING PROCESSING ==========================
@@ -325,10 +329,14 @@ class QueryParser:
         num_relevant_docs = len(relevant_docs)
 
         # Takes approx. 0.3 seconds for 10000+ dictionary terms
-        term_weights_dict = self.get_all_doc_weights()
+        if not bool(self.term_weights_dict):
+            st = time.time()
+            self.term_weights_dict = self.get_all_doc_weights()
+            end = time.time()
+            print("time taken for getting all weights: " + str(end - st))
 
         # Find the weights of the the terms inside the relevant documents
-        for term, posting in term_weights_dict.items():
+        for term, posting in self.term_weights_dict.items():
             # postings_dict is a dictionary that has the doc_id as key and an object containing the weight and positions
             # Example for the word 'inform':
             # 1. '12323': {'weight': 1.2323, 'positions': [12, 356, 2234]}
@@ -428,20 +436,60 @@ class QueryParser:
     # ====================== ACCESS INDEXING ===================================
     # ==========================================================================
 
+    def process_line(self, line, output_queue):
+        line = line.strip()
+        context, occurrences, postings = line.split(' ', 2)
+        posting = Posting(context, occurrences, postings)
+        output_queue.put((context, posting))
+
     def get_all_doc_weights(self):
         doc_weights_dic = collections.defaultdict()
-        with open('Postings.txt', 'r') as f:
-            for line in f:
-                line = line.strip()
-                context, occurrences, postings = line.split(' ', 2)
-                posting = Posting(context, occurrences, postings)
-                doc_weights_dic[context] = posting
+        output_queue = queue.Queue()
+
+        # Start a worker thread for each CPU core
+        num_threads = multiprocessing.cpu_count()
+        threads = []
+        with open('postings-17137.txt', 'r') as f:
+            for i in range(num_threads):
+                thread = threading.Thread(target=self.process_lines_worker, args=(f, output_queue))
+                threads.append(thread)
+                thread.start()
+
+            # Wait for all threads to finish
+            for thread in threads:
+                thread.join()
+
+        # Read results from the output queue
+        while not output_queue.empty():
+            context, posting = output_queue.get()
+            doc_weights_dic[context] = posting
+
+        return doc_weights_dic
+
+    def process_lines_worker(self, f, output_queue):
+        try:
+            for line in iter(f.readline, ''):
+                self.process_line(line, output_queue)
+        except Exception as e:
+            print(f"An error occurred: {e}")
+
+    def get_all_doc_weights(self):
+        doc_weights_dic = collections.defaultdict()
+        with open('postings-17137.txt', 'r') as f:
+            try:
+                for line in f:
+                    line = line.strip()
+                    context, occurrences, postings = line.split(' ', 2)
+                    posting = Posting(context, occurrences, postings)
+                    doc_weights_dic[context] = posting
+            except:
+                print("An error occurred")
         
         return doc_weights_dic
 
     def get_postings_list(self, term):
         postings_list_ptr = self.postings_reader.get_postings_ptr(term)
-        with open('postings.txt', 'r') as f:
+        with open('postings-17137.txt', 'r') as f:
             if postings_list_ptr == -1:
                 # print('[DEBUG] Cannot find term', term)
                 posting = Posting(term)
