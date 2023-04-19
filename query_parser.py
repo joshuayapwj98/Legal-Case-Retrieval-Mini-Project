@@ -105,6 +105,21 @@ class QueryParser:
                 query[0] = query[0] + ' ' + ' '.join(new_query_terms)
 
             normalization_query_vectors, score_dict = self.process_freetext_query(query)
+            # Get top K documents
+            top_documents = self.get_top_K_components(score_dict, self.K)
+            # TESTING
+            # top_documents = []    
+            if len(query) > 1:
+                other_relevant_docs = [doc_id for doc_id in query[1:]]
+                for doc_id in other_relevant_docs:
+                    top_documents.append(int(doc_id))
+            # First optimization: Start of Pseudo Relevance Feedback (RF)
+            
+            # print("doing rocchio")
+            new_query_vectors = self.rocchio(normalization_query_vectors, top_documents)
+            # print("finished rocchio")
+            top_term_vectors = self.get_top_K_word_vectors(new_query_vectors, 100)
+            # new_query_terms = self.filter_relevant_words(self.tokenize_query(query[0]), top_term_vectors, False)
             
             if approach == 1:
                 # First optimization: Start of Pseudo Relevance Feedback (RF)
@@ -226,7 +241,7 @@ class QueryParser:
 
                 score_dict[document_id] += w_tq * w_td
         
-        # Normalize score with document length
+        # Normalize score with document vector length
         for document_id in score_dict:
             score_dict[document_id] /= self.doc_lengths[document_id]
 
@@ -261,7 +276,19 @@ class QueryParser:
                 else: terms.append(word_token)
                 
         return terms
-    
+
+    def calculate_idf(self, term):
+        # print("calculating idf for", term)
+        idf = 0
+        posting_obj = self.get_postings_list(term)
+        occurrences = int(posting_obj.occurrences)
+
+        if occurrences != 0:
+            idf = math.log(self.N/occurrences, 10)
+
+        return idf
+
+    # gets query vector normalised by vector length
     def get_query_normalization_vectors(self, term_dict):
         square_w_tq_list = []
         query_weight_dict = collections.defaultdict(lambda: 0)
@@ -269,14 +296,8 @@ class QueryParser:
 
         for term in term_dict:
             if term not in query_weight_dict:
-                tf = idf = 0
-                posting_obj = self.get_postings_list(term)
-                occurrences = int(posting_obj.occurrences)
-
                 tf = 1 + math.log(term_dict[term], 10)
-
-                if occurrences != 0:
-                    idf = math.log(self.N/occurrences, 10)
+                idf = self.calculate_idf(term)
                 
                 w_tq = tf * idf
                 query_weight_dict[term] = w_tq
@@ -360,9 +381,8 @@ class QueryParser:
         # Keep only the top-ranked words
         relevant_words = set()
         for word, pos, count in ranked_words[:50]:
-            if pos.startswith('n'):
-                if ' ' not in word:
-                    relevant_words.add(word.replace('_', ' '))
+            if ' ' not in word:
+                relevant_words.add(word.replace('_', ' '))
 
         print("Relevant words:", relevant_words)
         return relevant_words
@@ -371,7 +391,7 @@ class QueryParser:
         docs_id_set = set()
         
         centroid_weights = collections.defaultdict(float)
-        anti_centroid_weights = collections.defaultdict(float)
+        # anti_centroid_weights = collections.defaultdict(float)
         query_centroid = collections.defaultdict(float)
 
         num_relevant_docs = len(relevant_docs)
@@ -386,33 +406,27 @@ class QueryParser:
         st = time.time()
         # Find the weights of the the terms inside the relevant documents
         for term, posting in self.term_weights_dict.items():
-            # postings_dict is a dictionary that has the doc_id as key and an object containing the weight and positions
-            # Example for the word 'inform':
-            # 1. '12323': {'weight': 1.2323, 'positions': [12, 356, 2234]}
+            if not term[0].isalpha():
+                break
+
             postings_dict = posting.postings
+            term_idf = self.calculate_idf(term)
             for doc_id, props in postings_dict.items():
                 weight = props['weight']
                 # Add to set of document collection
-                if doc_id not in docs_id_set:
-                    docs_id_set.add(doc_id)
+                # if doc_id not in docs_id_set:
+                #     docs_id_set.add(doc_id)
 
                 if doc_id in relevant_docs:
                     # Add to relevant centroid weights
-                    centroid_weights[term] += weight
-                else: 
-                    # Add to non-relevant centroid weights
-                    anti_centroid_weights[term] += weight
+                    centroid_weights[term] += weight * term_idf
+                # else: 
+                #     # Add to non-relevant centroid weights
+                #     anti_centroid_weights[term] += weight * term_idf
 
         # Calculate the average weight of the a term across all relevant documents 
         for term in centroid_weights:
             centroid_weights[term] /= num_relevant_docs
-        
-        # Calculate the average weight of the a term across all non relevant documents 
-        for term in anti_centroid_weights:
-            anti_centroid_weights[term] /= (len(docs_id_set) - num_relevant_docs)   
-        
-        end = time.time()
-        # print("time taken to update centroids: " + str(end - st))
 
         st = time.time()
         # Calculate the Rocchio algorithm
@@ -422,8 +436,8 @@ class QueryParser:
         for term, weight in centroid_weights.items():
             query_centroid[term] += beta * weight
 
-        for term, weight in anti_centroid_weights.items():
-            query_centroid[term] -= gamma * weight
+        # for term, weight in anti_centroid_weights.items():
+        #     query_centroid[term] -= gamma * weight
 
         end = time.time()
         # print("time taken calculate rocchio: " + str(end - st))
