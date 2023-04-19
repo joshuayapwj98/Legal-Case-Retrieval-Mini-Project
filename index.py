@@ -16,7 +16,6 @@ def usage():
     print("usage: " +
           sys.argv[0] + " -i directory-of-documents -d dictionary-file -p postings-file")
 
-
 def build_index(in_dir, out_dict, out_postings):
     """
     build index from documents stored in the input directory,
@@ -27,7 +26,6 @@ def build_index(in_dir, out_dict, out_postings):
     # get the start time
     st = time.time()
     VectorSpaceModel(in_dir, out_dict, out_postings).construct()
-    # VectorSpaceModel(in_dir, out_dict, out_postings).parse_data()
     end = time.time()
 
     print("time taken: " + str(end - st))
