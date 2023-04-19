@@ -29,6 +29,7 @@ def run_search(dict_file, postings_file, queries_path, results_file):
     parser = QueryParser()
     inFiles = os.listdir(queries_path)
     sorted_files = sorted(inFiles)
+    is_first_line = True
 
     # Iterate through all the files in the queries folder
     for file_name in sorted_files:
@@ -39,9 +40,18 @@ def run_search(dict_file, postings_file, queries_path, results_file):
                 # Get the contents of the text file and split it by the break line
                 contents = file.read().split('\n')
                 result = parser.process_query(contents, 10)
-                result_string = ', '.join(map(str, result))
-                print(result_string)
-                # print('result for', file_name, result)
+                print('result for', file_name, result)
+
+                if is_first_line:
+                    with open(results_file, "w") as f:
+                        f.write(' '.join(map(str,result)))
+                        f.close()
+                        is_first_line = False
+                
+                else: 
+                    with open(results_file, "a") as f:
+                        f.write("\n" + ' '.join(map(str,result)))
+                        f.close()
                 
 
 dictionary_file = postings_file = file_of_queries = output_file_of_results = None
