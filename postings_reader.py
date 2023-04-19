@@ -1,3 +1,5 @@
+import io
+
 class PostingsReader:
 
     def __init__(self):
@@ -10,6 +12,7 @@ class PostingsReader:
     Returns the pointer to the position of the term in postings.txt
     '''
     def get_postings_ptr(self, query_term):
+        print(query_term)
         postings_ptr = self.binary_search(query_term)
 
         # Prints the postings list of the term
@@ -40,12 +43,20 @@ class PostingsReader:
         left = 0 
         right = len(self.pointer_data) - 1
 
+        f = open('dictionary-17137.txt', 'rb')
+        f.seek(3951151, 0) # Points to |11|read‑onli|8|read—i
+        test = f.read(15)
+        print('TEST', test.decode('utf-8'))
+        # print(f.read(15)) # Prints |11|read‑onli|8
+        f.seek(3951166, 0) # increment by 15 Points to |8|read—i|10|re
+        print(f.read(15))
+
         while left <= right:
             mid = (left + right) // 2
             curr_block = self.pointer_data[mid].split(',') # E.g. 12,24968,41204,66916,209555
-            
+            print(curr_block)
             dict_ptr = int(curr_block[0])
-            f = open('dictionary.txt', 'r')
+            f = open('dictionary-17137.txt', 'rb')
             f.seek(dict_ptr, 0) # Points to |7|carrara|7|carrati|8|carratti|5|carri...
 
             # Linear search through each block
@@ -55,16 +66,19 @@ class PostingsReader:
             last_term = ""
             for i in range(num_of_terms):
                 count = 0 
-                length_of_term = ''
+                length_of_term = b''
 
                 while count < 2: 
                     next_char = f.read(1)
-                    if next_char == '|':
+                    if next_char == b'|':
                         count += 1
                     else: 
                         length_of_term += next_char
 
-                term = f.read(int(length_of_term))
+                # print('hello', length_of_term)
+                term = f.read(int(length_of_term.decode('utf-8')))
+                term = term.decode('utf-8')
+                # print(term)
 
                 if i == 0:
                     first_term = term
