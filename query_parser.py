@@ -61,7 +61,7 @@ class QueryParser:
         self.term_weights_dict = collections.defaultdict()
         
 
-    def process_query(self, query, K):
+    def process_query(self, query, K, approach=1):
         self.K = K
         
         print("processing query...")
@@ -70,33 +70,30 @@ class QueryParser:
         if 'AND' in query[0]:
             results = self.process_boolean_query(query)
         else:
+            if approach == 2:
+                # Second optimization: Perform filtering and query optimzation with WordNet
+                new_query_terms = self.filter_relevant_words(query[0], self.tokenize_query(query[0]))
+                query[0] = query[0] + ' ' + ' '.join(new_query_terms)
+
             normalization_query_vectors, score_dict = self.process_freetext_query(query)
-            # Get top K documents
-            top_documents = self.get_top_K_components(score_dict, self.K)
-            # TESTING
-            # top_documents = []    
-            if len(query) > 1:
-                other_relevant_docs = [doc_id for doc_id in query[1:]]
-                for doc_id in other_relevant_docs:
-                    top_documents.append(int(doc_id))
-            # First optimization: Start of Pseudo Relevance Feedback (RF)
-            new_query_vectors = self.rocchio(normalization_query_vectors, top_documents)
-            # top_term_vectors = self.get_top_K_word_vectors(new_query_vectors, 100)
-            # new_query_terms = self.filter_relevant_words(self.tokenize_query(query[0]), top_term_vectors, False)
             
-            # Second optimization: Perform filtering and query optimzation with WordNet
-            # new_query_terms = self.filter_relevant_words(self.tokenize_query(query[0]), top_term_vectors)
+            if approach == 1:
+                # First optimization: Start of Pseudo Relevance Feedback (RF)
+                # Get top K documents
+                top_documents = self.get_top_K_components(score_dict, self.K)
+                if len(query) > 1:
+                    other_relevant_docs = [doc_id for doc_id in query[1:]]
+                    for doc_id in other_relevant_docs:
+                        top_documents.append(int(doc_id))
+                new_query_vectors = self.rocchio(normalization_query_vectors, top_documents)
+                top_term_vectors = self.get_top_K_word_vectors(new_query_vectors, 100)
+
+                # Update query terms into normalization_query_vectors
+                for term in top_term_vectors:
+                    normalization_query_vectors[term[1]] = term[0]
+
+                normalization_query_vectors, score_dict = self.process_freetext_query(query, normalization_query_vectors)
             
-            # Update query terms into normalization_query_vectors
-            # for term in top_term_vectors:
-            #     normalization_query_vectors[term[1]] = term[0]
-
-            # Create new revised query
-            # revised_query = query[0]
-            # for term in top_term_vectors:
-            #     revised_query += ' ' + term[1]
-
-            normalization_query_vectors, score_dict = self.process_freetext_query(query, new_query_vectors)
             top_documents = self.get_top_K_components(score_dict, self.N)
             results = top_documents
 
@@ -299,29 +296,47 @@ class QueryParser:
     # ====================== QUERY EXPANSION TECHNIQUE ==========================
     # ===========================================================================
 
-    # def filter_relevant_words(self, query, terms, use_word_net = True):
-    #     stop_words = set(stopwords.words('english'))
-    #     punc = set(punctuation)
+    def filter_relevant_words(self, query, terms):
+        stop_words = set(stopwords.words('english'))
+        relevant_synonyms = self.word_net(query)
+        punc = set(punctuation)
         
-    #     filtered_words = [term for term in terms if term[1] not in stop_words \
-    #                       and term[1] not in punc \
-    #                         and term[1] not in query]
+        relevant_words = [term for term in relevant_synonyms if term not in stop_words \
+                          and term not in punc \
+                            and term not in query]
         
-    #     if use_word_net == True:
-    #         relevant_synonyms = self.word_net(query)
-    #         filtered_words = [term for term in terms if term[1] in relevant_synonyms]
-        
-    #     return filtered_words
+        return relevant_words
 
+    # def word_net(self, query):
+    #     # Find synonyms for each word in the query
+    #     synonyms = set()
+    #     words = []
+    #     for word in query.split(' '):
+    #         for synset in wordnet.synsets(word, pos=['v', 'n']):
+    #             synonyms.update(synset.lemma_names())
+
+    #     print("Synonyms:", synonyms)
+    #     return synonyms
+    
     def word_net(self, query):
         # Find synonyms for each word in the query
-        synonyms = set()
-        for word in query:
+        words = []
+        for word in query.split(' '):
             for synset in wordnet.synsets(word):
-                synonyms.update(synset.lemma_names())
+                for lemma in synset.lemmas():
+                    words.append((lemma.name(), synset.pos(), lemma.count()))
 
-        print("Synonyms:", synonyms)
-        return synonyms
+        ranked_words = sorted(words, key=lambda x: x[2], reverse=True)
+
+        # Keep only the top-ranked words
+        relevant_words = set()
+        for word, pos, count in ranked_words[:50]:
+            if pos.startswith('n'):
+                if ' ' not in word:
+                    relevant_words.add(word.replace('_', ' '))
+
+        print("Relevant words:", relevant_words)
+        return relevant_words
 
     def rocchio(self, normalized_query_vectors, relevant_docs, alpha=1, beta=0.70, gamma=0.05):
         docs_id_set = set()
@@ -339,6 +354,7 @@ class QueryParser:
             end = time.time()
             print("time taken for getting all weights: " + str(end - st))
 
+        st = time.time()
         # Find the weights of the the terms inside the relevant documents
         for term, posting in self.term_weights_dict.items():
             # postings_dict is a dictionary that has the doc_id as key and an object containing the weight and positions
@@ -365,6 +381,9 @@ class QueryParser:
         # Calculate the average weight of the a term across all non relevant documents 
         for term in anti_centroid_weights:
             anti_centroid_weights[term] /= (len(docs_id_set) - num_relevant_docs)   
+        
+        end = time.time()
+        print("time taken to update centroids: " + str(end - st))
 
         st = time.time()
         # Calculate the Rocchio algorithm
