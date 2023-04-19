@@ -336,7 +336,7 @@ class QueryParser:
         docs_id_set = set()
         
         centroid_weights = collections.defaultdict(float)
-        anti_centroid_weights = collections.defaultdict(float)
+        # anti_centroid_weights = collections.defaultdict(float)
         query_centroid = collections.defaultdict(float)
 
         num_relevant_docs = len(relevant_docs)
@@ -350,31 +350,27 @@ class QueryParser:
 
         # Find the weights of the the terms inside the relevant documents
         for term, posting in self.term_weights_dict.items():
-            # postings_dict is a dictionary that has the doc_id as key and an object containing the weight and positions
-            # Example for the word 'inform':
-            # 1. '12323': {'weight': 1.2323, 'positions': [12, 356, 2234]}
+            if not term[0].isalpha():
+                break
+
             postings_dict = posting.postings
             term_idf = self.calculate_idf(term)
             for doc_id, props in postings_dict.items():
                 weight = props['weight']
                 # Add to set of document collection
-                if doc_id not in docs_id_set:
-                    docs_id_set.add(doc_id)
+                # if doc_id not in docs_id_set:
+                #     docs_id_set.add(doc_id)
 
                 if doc_id in relevant_docs:
                     # Add to relevant centroid weights
                     centroid_weights[term] += weight * term_idf
-                else: 
-                    # Add to non-relevant centroid weights
-                    anti_centroid_weights[term] += weight * term_idf
+                # else: 
+                #     # Add to non-relevant centroid weights
+                #     anti_centroid_weights[term] += weight * term_idf
 
         # Calculate the average weight of the a term across all relevant documents 
         for term in centroid_weights:
             centroid_weights[term] /= num_relevant_docs
-        
-        # Calculate the average weight of the a term across all non relevant documents 
-        for term in anti_centroid_weights:
-            anti_centroid_weights[term] /= (len(docs_id_set) - num_relevant_docs)   
 
         st = time.time()
         # Calculate the Rocchio algorithm
@@ -384,8 +380,8 @@ class QueryParser:
         for term, weight in centroid_weights.items():
             query_centroid[term] += beta * weight
 
-        for term, weight in anti_centroid_weights.items():
-            query_centroid[term] -= gamma * weight
+        # for term, weight in anti_centroid_weights.items():
+        #     query_centroid[term] -= gamma * weight
 
         end = time.time()
         print("time taken calculate rocchio: " + str(end - st))

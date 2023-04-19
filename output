@@ -1,0 +1,11 @@
+running search on the queries...
+processing query...
+calculating idf for quiet
+calculating idf for phone
+calculating idf for call
+doing rocchio
+An error occurred
+time taken for getting all weights: 16.25300359725952
+calculating idf for !
+calculating idf for #
+calculating idf for $
