@@ -4,6 +4,7 @@ import heapq
 import collections
 import nltk
 import numpy as np
+import sys
 
 from functools import partial
 
@@ -243,6 +244,7 @@ class QueryParser:
 
     def calculate_idf(self, term):
         print("calculating idf for", term)
+        sys.stdout.flush()
         idf = 0
         posting_obj = self.get_postings_list(term)
         occurrences = int(posting_obj.occurrences)
@@ -356,6 +358,7 @@ class QueryParser:
         st = time.time()
         for term, posting in self.term_weights_dict.items():
             pool.apply_async(self.rocchio_centroid_update_worker, args=(term, posting, relevant_docs, centroid_weights))
+            print("applied")
 
         pool.close()
         pool.join()
@@ -482,41 +485,73 @@ class QueryParser:
         output_queue.put((context, posting))
     
 
-    def process_line_parallel(self, line):
-        line = line.strip()
-        context, occurrences, postings = line.split(' ', 2)
-        posting = Posting(context, occurrences, postings)
-        return context, posting
+    # def process_line_parallel(self, line):
+    #     line = line.strip()
+    #     context, occurrences, postings = line.split(' ', 2)
+    #     posting = Posting(context, occurrences, postings)
+    #     return context, posting
 
-    def get_all_doc_weights(self):
-        doc_weights_dic = collections.defaultdict()
-        # output_queue = multiprocessing.Queue()
+    # def get_all_doc_weights(self):
+    #     doc_weights_dic = collections.defaultdict()
+    #     # output_queue = multiprocessing.Queue()
 
-        # Start a worker thread for each CPU core
-        num_threads = multiprocessing.cpu_count()
-        pool = multiprocessing.Pool()
-        threads = []
-        with open(self.postings_file, 'r') as f:
-            output_queue = pool.map(self.process_line_parallel, iter(f.readline, ''))
-            # for i in range(num_threads):
-            #     thread = threading.Thread(target=self.process_lines_worker, args=(f, output_queue))
-            #     threads.append(thread)
-            #     thread.start()
+    #     # Start a worker thread for each CPU core
+    #     num_threads = multiprocessing.cpu_count()
+    #     pool = multiprocessing.Pool()
+    #     threads = []
+    #     with open(self.postings_file, 'r') as f:
+    #         output_queue = pool.map(self.process_line_parallel, iter(f.readline, ''))
+    #         # for i in range(num_threads):
+    #         #     thread = threading.Thread(target=self.process_lines_worker, args=(f, output_queue))
+    #         #     threads.append(thread)
+    #         #     thread.start()
 
-            # # Wait for all threads to finish
-            # for thread in threads:
-            #     thread.join()
+    #         # # Wait for all threads to finish
+    #         # for thread in threads:
+    #         #     thread.join()
 
         
-        # Read results from the output queue
-        for context, posting in output_queue:
-            doc_weights_dic[context] = posting
+    #     # Read results from the output queue
+    #     for context, posting in output_queue:
+    #         doc_weights_dic[context] = posting
 
-        # while not output_queue.empty():
-        #     context, posting = output_queue.get()
-        #     doc_weights_dic[context] = posting
+    #     # while not output_queue.empty():
+    #     #     context, posting = output_queue.get()
+    #     #     doc_weights_dic[context] = posting
 
-        return doc_weights_dic
+    #     return doc_weights_dic
+
+
+    # def get_all_doc_weights(self):
+    #     doc_weights_dic = collections.defaultdict()
+    #     output_queue = queue.Queue()
+
+    #     # Start a worker thread for each CPU core
+    #     num_threads = multiprocessing.cpu_count()
+    #     threads = []
+    #     with open(self.postings_file, 'r') as f:
+    #         for i in range(num_threads):
+    #             thread = threading.Thread(target=self.process_lines_worker, args=(f, output_queue))
+    #             threads.append(thread)
+    #             thread.start()
+
+    #         # Wait for all threads to finish
+    #         for thread in threads:
+    #             thread.join()
+
+    #     # Read results from the output queue
+    #     while not output_queue.empty():
+    #         context, posting = output_queue.get()
+    #         doc_weights_dic[context] = posting
+
+    #     return doc_weights_dic
+
+    def process_lines_worker(self, f, output_queue):
+        try:
+            for line in iter(f.readline, ''):
+                self.process_line(line, output_queue)
+        except Exception as e:
+            print(f"An error occurred: {e}")
     
 
     def process_lines_worker(self, f, output_queue):
@@ -526,19 +561,19 @@ class QueryParser:
         except Exception as e:
             print(f"An error occurred: {e}")
 
-    # def get_all_doc_weights(self):
-    #     doc_weights_dic = collections.defaultdict()
-    #     with open(self.postings_file, 'r') as f:
-    #         try:
-    #             for line in f:
-    #                 line = line.strip()
-    #                 context, occurrences, postings = line.split(' ', 2)
-    #                 posting = Posting(context, occurrences, postings)
-    #                 doc_weights_dic[context] = posting
-    #         except:
-    #             print("An error occurred")
+    def get_all_doc_weights(self):
+        doc_weights_dic = collections.defaultdict()
+        with open(self.postings_file, 'r') as f:
+            try:
+                for line in f:
+                    line = line.strip()
+                    context, occurrences, postings = line.split(' ', 2)
+                    posting = Posting(context, occurrences, postings)
+                    doc_weights_dic[context] = posting
+            except:
+                print("An error occurred")
         
-    #     return doc_weights_dic
+        return doc_weights_dic
 
     def get_postings_list(self, term):
         postings_list_ptr = self.postings_reader.get_postings_ptr(term)
