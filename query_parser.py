@@ -81,22 +81,22 @@ class QueryParser:
                     top_documents.append(int(doc_id))
             # First optimization: Start of Pseudo Relevance Feedback (RF)
             new_query_vectors = self.rocchio(normalization_query_vectors, top_documents)
-            top_term_vectors = self.get_top_K_word_vectors(new_query_vectors, 100)
+            # top_term_vectors = self.get_top_K_word_vectors(new_query_vectors, 100)
             # new_query_terms = self.filter_relevant_words(self.tokenize_query(query[0]), top_term_vectors, False)
             
             # Second optimization: Perform filtering and query optimzation with WordNet
             # new_query_terms = self.filter_relevant_words(self.tokenize_query(query[0]), top_term_vectors)
             
             # Update query terms into normalization_query_vectors
-            for term in top_term_vectors:
-                normalization_query_vectors[term[1]] = term[0]
+            # for term in top_term_vectors:
+            #     normalization_query_vectors[term[1]] = term[0]
 
             # Create new revised query
             # revised_query = query[0]
             # for term in top_term_vectors:
             #     revised_query += ' ' + term[1]
 
-            normalization_query_vectors, score_dict = self.process_freetext_query(query, normalization_query_vectors)
+            normalization_query_vectors, score_dict = self.process_freetext_query(query, new_query_vectors)
             top_documents = self.get_top_K_components(score_dict, self.N)
             results = top_documents
 
@@ -366,6 +366,7 @@ class QueryParser:
         for term in anti_centroid_weights:
             anti_centroid_weights[term] /= (len(docs_id_set) - num_relevant_docs)   
 
+        st = time.time()
         # Calculate the Rocchio algorithm
         for term, weight in normalized_query_vectors.items():
             query_centroid[term] = alpha * weight
@@ -375,6 +376,9 @@ class QueryParser:
 
         for term, weight in anti_centroid_weights.items():
             query_centroid[term] -= gamma * weight
+
+        end = time.time()
+        print("time taken calculate rocchio: " + str(end - st))
 
         return query_centroid
 
@@ -479,7 +483,7 @@ class QueryParser:
 
     def get_all_doc_weights(self):
         doc_weights_dic = collections.defaultdict()
-        with open('postings-17137.txt', 'r') as f:
+        with open(self.postings_file, 'r') as f:
             try:
                 for line in f:
                     line = line.strip()
