@@ -453,7 +453,7 @@ class QueryParser:
         # Start a worker thread for each CPU core
         num_threads = multiprocessing.cpu_count()
         threads = []
-        with open('postings-17137.txt', 'r') as f:
+        with open(self.postings_file, 'r') as f:
             for i in range(num_threads):
                 thread = threading.Thread(target=self.process_lines_worker, args=(f, output_queue))
                 threads.append(thread)
@@ -493,7 +493,7 @@ class QueryParser:
 
     def get_postings_list(self, term):
         postings_list_ptr = self.postings_reader.get_postings_ptr(term)
-        with open('postings-17137.txt', 'r') as f:
+        with open(self.postings_file, 'r') as f:
             if postings_list_ptr == -1:
                 # print('[DEBUG] Cannot find term', term)
                 posting = Posting(term)
