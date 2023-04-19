@@ -39,7 +39,9 @@ def run_search(dict_file, postings_file, queries_path, results_file):
                 # Get the contents of the text file and split it by the break line
                 contents = file.read().split('\n')
                 result = parser.process_query(contents, 10)
-                print('result for', file_name, result)
+                result_string = ', '.join(map(str, result))
+                print(result_string)
+                # print('result for', file_name, result)
                 
 
 dictionary_file = postings_file = file_of_queries = output_file_of_results = None
