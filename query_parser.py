@@ -62,7 +62,9 @@ class QueryParser:
         if 'AND' in query[0]:
             results = self.process_boolean_query(query)
         else:
-            normalization_query_vectors, top_documents = self.process_freetext_query(query)
+            normalization_query_vectors, score_dict = self.process_freetext_query(query)
+            # Get top K documents
+            top_documents = self.get_top_K_components(score_dict, self.K)
             # TESTING
             # top_documents = []
             if len(query) > 1:
@@ -86,7 +88,8 @@ class QueryParser:
             # for term in top_term_vectors:
             #     revised_query += ' ' + term[1]
 
-            normalization_query_vectors, top_documents = self.process_freetext_query(query, normalization_query_vectors)
+            normalization_query_vectors, score_dict = self.process_freetext_query(query, normalization_query_vectors)
+            top_documents = self.get_top_K_components(score_dict, self.N)
             results = top_documents
 
         return results
@@ -193,10 +196,7 @@ class QueryParser:
         for document_id in score_dict:
             score_dict[document_id] /= self.doc_lengths[document_id]
 
-        # Get top K documents
-        top_documents = self.get_top_K_components(score_dict, self.K)
-
-        return normalization_query_vectors, top_documents
+        return normalization_query_vectors, score_dict
     
     # ====================================================================
     # ====================== RANKING PROCESSING ==========================
@@ -277,7 +277,7 @@ class QueryParser:
         
         heapq.heapify(score_tuples)
 
-        for i in range(K):
+        for i in range(int(K)):
             if len(score_tuples) != 0:
                 tuple_result = heapq.heappop(score_tuples)
                 if tuple_result[1] not in result:
