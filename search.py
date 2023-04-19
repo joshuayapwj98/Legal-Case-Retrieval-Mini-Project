@@ -39,7 +39,7 @@ def run_search(dict_file, postings_file, queries_path, results_file):
             with open(file_path, 'r') as file:
                 # Get the contents of the text file and split it by the break line
                 contents = file.read().split('\n')
-                result = parser.process_query(contents, 10, 1)
+                result = parser.process_query(contents, 10, 2)
                 print('result for', file_name, result)
 
                 if is_first_line:

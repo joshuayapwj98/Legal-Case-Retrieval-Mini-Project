@@ -4,7 +4,7 @@ import heapq
 import collections
 import nltk
 import numpy as np
-
+import os
 import time
 
 import multiprocessing
@@ -14,12 +14,39 @@ import queue
 from nltk.stem.porter import PorterStemmer
 from postings_reader import PostingsReader
 
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
+
 nltk.download('wordnet')
 nltk.download('stopwords')
 
 from nltk.corpus import wordnet
 from nltk.corpus import stopwords
 from string import punctuation
+
+
+class FileReaderThread(threading.Thread):
+    def __init__(self, file, chunk_size, output_queue):
+        threading.Thread.__init__(self)
+        self.file = file
+        self.chunk_size = chunk_size
+        self.output_queue = output_queue
+
+    def run(self):
+        chunk = self.file.read(self.chunk_size)
+        while chunk:
+            doc_weights_dic = collections.defaultdict()
+            for line in chunk.strip().split('\n'):
+                context = ''
+                try:
+                    context, occurrences, postings = line.split(' ', 2)
+                    posting = Posting(context, occurrences, postings)
+                    doc_weights_dic[context] = posting
+                except:
+                    print("An error occurred", context)
+            self.output_queue.put(doc_weights_dic)
+            chunk = self.file.read(self.chunk_size)
+        self.output_queue.put(None)
 
 class Posting:
 
@@ -32,21 +59,23 @@ class Posting:
         
 
     def parse_postings(self, postings):
-        postings_list = postings.split(' ')
-        last_doc_id = 0  # keep track of the last processed doc_id
-        for posting in postings_list:
-            parts = posting.split(':')
-            doc_id_increment, weight = parts[0].split(',')
-            doc_id = last_doc_id + int(doc_id_increment)
-            positions = []
-            last_position = 0
-            for p in parts[1].split(','):
-                position = last_position + int(p)
-                positions.append(position)
-                last_position = position
-            self.postings[doc_id] = {'weight': float(weight), 'positions': positions}
-            last_doc_id = doc_id  # update the last processed doc_id
-
+        try:
+            postings_list = postings.split(' ')
+            last_doc_id = 0  # keep track of the last processed doc_id
+            for posting in postings_list:
+                parts = posting.split(':')
+                doc_id_increment, weight = parts[0].split(',')
+                doc_id = last_doc_id + int(doc_id_increment)
+                positions = []
+                last_position = 0
+                for p in parts[1].split(','):
+                    position = last_position + int(p)
+                    positions.append(position)
+                    last_position = position
+                self.postings[doc_id] = {'weight': float(weight), 'positions': positions}
+                last_doc_id = doc_id  # update the last processed doc_id
+        except:
+            print('issue with parsing with term', self.context)
 class QueryParser:
 
     def __init__(self, dict_file, postings_file):
@@ -352,7 +381,7 @@ class QueryParser:
             st = time.time()
             self.term_weights_dict = self.get_all_doc_weights()
             end = time.time()
-            print("time taken for getting all weights: " + str(end - st))
+            # print("time taken for getting all weights: " + str(end - st))
 
         st = time.time()
         # Find the weights of the the terms inside the relevant documents
@@ -383,7 +412,7 @@ class QueryParser:
             anti_centroid_weights[term] /= (len(docs_id_set) - num_relevant_docs)   
         
         end = time.time()
-        print("time taken to update centroids: " + str(end - st))
+        # print("time taken to update centroids: " + str(end - st))
 
         st = time.time()
         # Calculate the Rocchio algorithm
@@ -397,7 +426,7 @@ class QueryParser:
             query_centroid[term] -= gamma * weight
 
         end = time.time()
-        print("time taken calculate rocchio: " + str(end - st))
+        # print("time taken calculate rocchio: " + str(end - st))
 
         return query_centroid
 
@@ -463,11 +492,19 @@ class QueryParser:
     # ====================== ACCESS INDEXING ===================================
     # ==========================================================================
 
-    def process_line(self, line, output_queue):
-        line = line.strip()
-        context, occurrences, postings = line.split(' ', 2)
-        posting = Posting(context, occurrences, postings)
-        output_queue.put((context, posting))
+    # def get_all_doc_weights(self):
+    #     doc_weights_dic = collections.defaultdict()
+    #     with open(self.postings_file, 'r') as f:
+    #         try:
+    #             for line in f:
+    #                 line = line.strip()
+    #                 context, occurrences, postings = line.split(' ', 2)
+    #                 posting = Posting(context, occurrences, postings)
+    #                 doc_weights_dic[context] = posting
+    #         except:
+    #             print("An error occurred")
+        
+    #     return doc_weights_dic
 
     def get_all_doc_weights(self):
         doc_weights_dic = collections.defaultdict()
@@ -477,41 +514,25 @@ class QueryParser:
         num_threads = multiprocessing.cpu_count()
         threads = []
         with open(self.postings_file, 'r') as f:
+            chunk_size = int(os.path.getsize(self.postings_file) / num_threads) + 1
             for i in range(num_threads):
-                thread = threading.Thread(target=self.process_lines_worker, args=(f, output_queue))
+                thread = FileReaderThread(f, chunk_size, output_queue)
                 threads.append(thread)
                 thread.start()
+
+            # Read results from the output queue
+            for i in range(num_threads):
+                while True:
+                    chunk_result = output_queue.get()
+                    if chunk_result is None:
+                        break
+                    for context, posting in chunk_result.items():
+                        doc_weights_dic[context] = posting
 
             # Wait for all threads to finish
             for thread in threads:
                 thread.join()
 
-        # Read results from the output queue
-        while not output_queue.empty():
-            context, posting = output_queue.get()
-            doc_weights_dic[context] = posting
-
-        return doc_weights_dic
-
-    def process_lines_worker(self, f, output_queue):
-        try:
-            for line in iter(f.readline, ''):
-                self.process_line(line, output_queue)
-        except Exception as e:
-            print(f"An error occurred: {e}")
-
-    def get_all_doc_weights(self):
-        doc_weights_dic = collections.defaultdict()
-        with open(self.postings_file, 'r') as f:
-            try:
-                for line in f:
-                    line = line.strip()
-                    context, occurrences, postings = line.split(' ', 2)
-                    posting = Posting(context, occurrences, postings)
-                    doc_weights_dic[context] = posting
-            except:
-                print("An error occurred")
-        
         return doc_weights_dic
 
     def get_postings_list(self, term):
