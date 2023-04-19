@@ -26,7 +26,7 @@ def run_search(dict_file, postings_file, queries_path, results_file):
     # This is an empty method
     # Pls implement your code in below
     
-    parser = QueryParser()
+    parser = QueryParser(dict_file, postings_file)
     inFiles = os.listdir(queries_path)
     sorted_files = sorted(inFiles)
     is_first_line = True

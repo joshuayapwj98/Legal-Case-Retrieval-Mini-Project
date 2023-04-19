@@ -2,7 +2,9 @@ import io
 
 class PostingsReader:
 
-    def __init__(self):
+    def __init__(self, dict_file, postings_file):
+        self.dict_file = dict_file
+        self.postings_file = postings_file
         # Load all of the pointers from pointers.txt into memory
         self.pointer_data = []
         with open('pointers.txt', 'r') as f:
@@ -17,7 +19,7 @@ class PostingsReader:
 
         # Prints the postings list of the term
         if postings_ptr != -1: 
-            with open("postings.txt", 'r') as f:
+            with open(self.postings_file, 'r') as f:
                 f.seek(postings_ptr, 0)
                 # print("postings list retrieved:", f.readline())
 
@@ -27,7 +29,7 @@ class PostingsReader:
     Returns the doc_freq of the term from postings.txt
     '''
     def get_doc_freq(self, postings_ptr):
-        with open('postings.txt', 'r') as f: 
+        with open(self.postings_file, 'r') as f: 
             line = f.readline()
             values = line.split()
             # print("doc_freq for term ", values[0], "is ", values[1])
@@ -43,20 +45,12 @@ class PostingsReader:
         left = 0 
         right = len(self.pointer_data) - 1
 
-        # f = open('dictionary-17137.txt', 'rb')
-        # f.seek(3951151, 0) # Points to |11|read‑onli|8|read—i
-        # test = f.read(15)
-        # print('TEST', test.decode('utf-8'))
-        # # print(f.read(15)) # Prints |11|read‑onli|8
-        # f.seek(3951166, 0) # increment by 15 Points to |8|read—i|10|re
-        # print(f.read(15))
-
         while left <= right:
             mid = (left + right) // 2
             curr_block = self.pointer_data[mid].split(',') # E.g. 12,24968,41204,66916,209555
             # print(curr_block)
             dict_ptr = int(curr_block[0])
-            f = open('dictionary-17137.txt', 'rb')
+            f = open(self.dict_file, 'rb')
             f.seek(dict_ptr, 0) # Points to |7|carrara|7|carrati|8|carratti|5|carri...
 
             # Linear search through each block
@@ -78,7 +72,6 @@ class PostingsReader:
                 # print('hello', length_of_term)
                 term = f.read(int(length_of_term.decode('utf-8')))
                 term = term.decode('utf-8')
-                # print(term)
 
                 if i == 0:
                     first_term = term

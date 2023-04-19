@@ -29,6 +29,7 @@ class Posting:
         self.postings = {}
         if self.occurrences != 0:
             self.parse_postings(postings)
+        
 
     def parse_postings(self, postings):
         postings_list = postings.split(' ')
@@ -48,14 +49,17 @@ class Posting:
 
 class QueryParser:
 
-    def __init__(self):
+    def __init__(self, dict_file, postings_file):
         # N represents the total number of articles in the dataset.
         self.N = 0
         self.K = 10
+        self.dict_file = dict_file
+        self.postings_file = postings_file
         self.doc_lengths = dict()
-        self.postings_reader = PostingsReader()
+        self.postings_reader = PostingsReader(dict_file, postings_file)
         self.stemmer = PorterStemmer()
         self.term_weights_dict = collections.defaultdict()
+        
 
     def process_query(self, query, K):
         self.K = K
