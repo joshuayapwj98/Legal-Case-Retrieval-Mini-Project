@@ -6,6 +6,7 @@ import time
 from nltk.tokenize import word_tokenize
 from nltk.tokenize import sent_tokenize
 from nltk.stem.porter import PorterStemmer
+import multiprocessing as mp
 
 class VectorSpaceModel:
     """
@@ -107,6 +108,44 @@ class VectorSpaceModel:
 
         if os.path.exists("pointers.txt"):
             os.remove("pointers.txt")
+
+    def construct_loop(self, doc_id, doc_content, terms, term_doc_freq, terms_counted, term_id_pos):
+        terms_counted = {} # list of terms in doc_id already counted in doc_freq
+        position = 0 # positional index
+        for line in doc_content:
+            for sentence_token in sent_tokenize(line):
+                for word_token in word_tokenize(sentence_token):
+                    # stem and case-folding
+                    word_token = stemmer.stem(word_token).lower()
+                    # skip empty strings
+                    if len(word_token) == 0:
+                        continue
+                    else:
+                        # first unique instance of term in all docs
+                        # add word_token into list of terms
+                        if word_token not in terms:
+                            terms[word_token] = 1
+                            term_doc_freq[word_token] = 1 # { term : doc_freq }
+                            terms_counted[word_token] = 1
+
+                        # check if doc_id is counted in doc_freq
+                        if word_token not in terms_counted:
+                            term_doc_freq[word_token] += 1 # { term : doc_freq }
+                            terms_counted[word_token] = 1
+                        
+                        # add word_token into posting list
+                        # value as { term : docID : [position...]}
+                        if word_token not in term_id_pos:
+                            term_id_pos[word_token] = {}
+                            term_id_pos[word_token][doc_id] = list()
+                            term_id_pos[word_token][doc_id].append(position)
+                        else :
+                            if doc_id not in term_id_pos[word_token]:
+                                term_id_pos[word_token][doc_id] = list()
+                                term_id_pos[word_token][doc_id].append(position)
+                            else:
+                                term_id_pos[word_token][doc_id].append(position)
+                        position += 1
         
     def construct(self):
         """
@@ -114,62 +153,71 @@ class VectorSpaceModel:
         """
         st = time.time()
         self.reset_files()
+        manager = mp.Manager()
 
         print("constructing index...")
         stemmer = PorterStemmer()
         all_doc_ids, title, content, date_posted, court = self.parse_data()
         total_num_docs = len(all_doc_ids)
-        terms = {} # a list of terms
-        term_doc_freq = {} # key: string, value: int { term : doc_freq }
-        term_id_pos = {} # { term : { docID : [position...] } }
-        postings = {} # key: string, value: a dictionary { term : {docID : term_freq, docID : term_freq ...} }
-        count = 0
+        terms = manager.dict() # a list of terms
+        term_doc_freq = manager.dict() # key: string, value: int { term : doc_freq }
+        term_id_pos = manager.dict() # { term : { docID : [position...] } }
+        # postings = {} # key: string, value: a dictionary { term : {docID : term_freq, docID : term_freq ...} }
 
+        pool = manager.Pool()
         for doc_id in all_doc_ids:
-            if (count % 100 == 0):
-                print("completed parsing {} number of documents. Parsing next 100 documents...".format(count))
-                end = time.time()
-                print("time taken: " + str(end - st))
-
             doc_id = str(doc_id)
-            terms_counted = {} # list of terms in doc_id already counted in doc_freq
-            position = 0 # positional index
             doc_content = content[doc_id].split("\n")
-            for line in doc_content:
-                for sentence_token in sent_tokenize(line):
-                    for word_token in word_tokenize(sentence_token):
-                        # stem and case-folding
-                        word_token = stemmer.stem(word_token).lower()
-                        # skip empty strings
-                        if len(word_token) == 0:
-                            continue
-                        else:
-                            # first unique instance of term in all docs
-                            # add word_token into list of terms
-                            if word_token not in terms:
-                                terms[word_token] = 1
-                                term_doc_freq[word_token] = 1 # { term : doc_freq }
-                                terms_counted[word_token] = 1
+            pool.apply_async(construct_loop, args = (doc_id, doc_content, terms, term_doc_freq, terms_counted, term_id_pos))
 
-                            # check if doc_id is counted in doc_freq
-                            if word_token not in terms_counted:
-                                term_doc_freq[word_token] += 1 # { term : doc_freq }
-                                terms_counted[word_token] = 1
+
+        pool.close()
+        pool.join()
+
+            # if (count % 100 == 0):
+            #     print("completed parsing {} number of documents. Parsing next 100 documents...".format(count))
+            #     end = time.time()
+            #     print("time taken: " + str(end - st))
+
+            # doc_id = str(doc_id)
+            # terms_counted = {} # list of terms in doc_id already counted in doc_freq
+            # position = 0 # positional index
+            # doc_content = content[doc_id].split("\n")
+            # for line in doc_content:
+            #     for sentence_token in sent_tokenize(line):
+            #         for word_token in word_tokenize(sentence_token):
+            #             # stem and case-folding
+            #             word_token = stemmer.stem(word_token).lower()
+            #             # skip empty strings
+            #             if len(word_token) == 0:
+            #                 continue
+            #             else:
+            #                 # first unique instance of term in all docs
+            #                 # add word_token into list of terms
+            #                 if word_token not in terms:
+            #                     terms[word_token] = 1
+            #                     term_doc_freq[word_token] = 1 # { term : doc_freq }
+            #                     terms_counted[word_token] = 1
+
+            #                 # check if doc_id is counted in doc_freq
+            #                 if word_token not in terms_counted:
+            #                     term_doc_freq[word_token] += 1 # { term : doc_freq }
+            #                     terms_counted[word_token] = 1
                             
-                            # add word_token into posting list
-                            # value as { term : docID : [position...]}
-                            if word_token not in term_id_pos:
-                                term_id_pos[word_token] = {}
-                                term_id_pos[word_token][doc_id] = list()
-                                term_id_pos[word_token][doc_id].append(position)
-                            else :
-                                if doc_id not in term_id_pos[word_token]:
-                                    term_id_pos[word_token][doc_id] = list()
-                                    term_id_pos[word_token][doc_id].append(position)
-                                else:
-                                    term_id_pos[word_token][doc_id].append(position)
-                            position += 1
-            count += 1
+            #                 # add word_token into posting list
+            #                 # value as { term : docID : [position...]}
+            #                 if word_token not in term_id_pos:
+            #                     term_id_pos[word_token] = {}
+            #                     term_id_pos[word_token][doc_id] = list()
+            #                     term_id_pos[word_token][doc_id].append(position)
+            #                 else :
+            #                     if doc_id not in term_id_pos[word_token]:
+            #                         term_id_pos[word_token][doc_id] = list()
+            #                         term_id_pos[word_token][doc_id].append(position)
+            #                     else:
+            #                         term_id_pos[word_token][doc_id].append(position)
+            #                 position += 1
+            # count += 1
         
         doc_len, postings = self.construct_weighted_postings(all_doc_ids, term_id_pos)
         terms = dict(sorted(terms.items()))
