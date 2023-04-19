@@ -27,10 +27,11 @@ def run_search(dict_file, postings_file, queries_path, results_file):
     # Pls implement your code in below
     
     parser = QueryParser()
-    
-    count = 1
+    inFiles = os.listdir(queries_path)
+    sorted_files = sorted(inFiles)
+
     # Iterate through all the files in the queries folder
-    for file_name in os.listdir(queries_path):
+    for file_name in sorted_files:
         # if count == 0: break
         file_path = os.path.join(queries_path, file_name)
         if os.path.isfile(file_path):
@@ -38,8 +39,7 @@ def run_search(dict_file, postings_file, queries_path, results_file):
                 # Get the contents of the text file and split it by the break line
                 contents = file.read().split('\n')
                 result = parser.process_query(contents, 10)
-                print('result for q' + str(count), result)
-                count += 1
+                print('result for', file_name, result)
                 
 
 dictionary_file = postings_file = file_of_queries = output_file_of_results = None

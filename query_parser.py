@@ -280,7 +280,8 @@ class QueryParser:
         for i in range(K):
             if len(score_tuples) != 0:
                 tuple_result = heapq.heappop(score_tuples)
-                result.append(tuple_result[1])
+                if tuple_result[1] not in result:
+                    result.append(tuple_result[1])
             else:
                 break
 
