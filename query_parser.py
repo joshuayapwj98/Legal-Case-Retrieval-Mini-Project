@@ -99,10 +99,10 @@ class QueryParser:
         if 'AND' in query[0]:
             results = self.process_boolean_query(query)
         else:
-            if approach == 2:
-                # Second optimization: Perform filtering and query optimzation with WordNet
-                new_query_terms = self.filter_relevant_words(query[0], self.tokenize_query(query[0]))
-                query[0] = query[0] + ' ' + ' '.join(new_query_terms)
+            # if approach == 2:
+            # Second optimization: Perform filtering and query optimzation with WordNet
+            new_query_terms = self.filter_relevant_words(query[0], self.tokenize_query(query[0]))
+            query[0] = query[0] + ' ' + ' '.join(new_query_terms)
 
             normalization_query_vectors, score_dict = self.process_freetext_query(query)
             # Get top K documents
@@ -113,6 +113,7 @@ class QueryParser:
                 other_relevant_docs = [doc_id for doc_id in query[1:]]
                 for doc_id in other_relevant_docs:
                     top_documents.append(int(doc_id))
+                    
             # First optimization: Start of Pseudo Relevance Feedback (RF)
             
             # print("doing rocchio")
@@ -121,22 +122,22 @@ class QueryParser:
             top_term_vectors = self.get_top_K_word_vectors(new_query_vectors, 100)
             # new_query_terms = self.filter_relevant_words(self.tokenize_query(query[0]), top_term_vectors, False)
             
-            if approach == 1:
+            # if approach == 1:
                 # First optimization: Start of Pseudo Relevance Feedback (RF)
                 # Get top K documents
-                top_documents = self.get_top_K_components(score_dict, self.K)
-                if len(query) > 1:
-                    other_relevant_docs = [doc_id for doc_id in query[1:]]
-                    for doc_id in other_relevant_docs:
-                        top_documents.append(int(doc_id))
-                new_query_vectors = self.rocchio(normalization_query_vectors, top_documents)
-                top_term_vectors = self.get_top_K_word_vectors(new_query_vectors, 100)
+            top_documents = self.get_top_K_components(score_dict, self.K)
+            if len(query) > 1:
+                other_relevant_docs = [doc_id for doc_id in query[1:]]
+                for doc_id in other_relevant_docs:
+                    top_documents.append(int(doc_id))
+            new_query_vectors = self.rocchio(normalization_query_vectors, top_documents)
+            top_term_vectors = self.get_top_K_word_vectors(new_query_vectors, 100)
 
-                # Update query terms into normalization_query_vectors
-                for term in top_term_vectors:
-                    normalization_query_vectors[term[1]] = term[0]
+            # Update query terms into normalization_query_vectors
+            for term in top_term_vectors:
+                normalization_query_vectors[term[1]] = term[0]
 
-                normalization_query_vectors, score_dict = self.process_freetext_query(query, normalization_query_vectors)
+            normalization_query_vectors, score_dict = self.process_freetext_query(query, normalization_query_vectors)
             
             top_documents = self.get_top_K_components(score_dict, self.N)
             results = top_documents
