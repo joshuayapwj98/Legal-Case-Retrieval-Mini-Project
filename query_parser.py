@@ -5,6 +5,8 @@ import collections
 import nltk
 import numpy as np
 
+from functools import partial
+
 import time
 
 import multiprocessing
@@ -80,8 +82,11 @@ class QueryParser:
                 for doc_id in other_relevant_docs:
                     top_documents.append(int(doc_id))
             # First optimization: Start of Pseudo Relevance Feedback (RF)
+            
+            print("doing rocchio")
             new_query_vectors = self.rocchio(normalization_query_vectors, top_documents)
-            # top_term_vectors = self.get_top_K_word_vectors(new_query_vectors, 100)
+            print("finished rocchio")
+            top_term_vectors = self.get_top_K_word_vectors(new_query_vectors, 100)
             # new_query_terms = self.filter_relevant_words(self.tokenize_query(query[0]), top_term_vectors, False)
             
             # Second optimization: Perform filtering and query optimzation with WordNet
@@ -200,7 +205,7 @@ class QueryParser:
 
                 score_dict[document_id] += w_tq * w_td
         
-        # Normalize score with document length
+        # Normalize score with document vector length
         for document_id in score_dict:
             score_dict[document_id] /= self.doc_lengths[document_id]
 
@@ -235,7 +240,19 @@ class QueryParser:
                 else: terms.append(word_token)
                 
         return terms
-    
+
+    def calculate_idf(self, term):
+        print("calculating idf for", term)
+        idf = 0
+        posting_obj = self.get_postings_list(term)
+        occurrences = int(posting_obj.occurrences)
+
+        if occurrences != 0:
+            idf = math.log(self.N/occurrences, 10)
+
+        return idf
+
+    # gets query vector normalised by vector length
     def get_query_normalization_vectors(self, term_dict):
         square_w_tq_list = []
         query_weight_dict = collections.defaultdict(lambda: 0)
@@ -243,14 +260,8 @@ class QueryParser:
 
         for term in term_dict:
             if term not in query_weight_dict:
-                tf = idf = 0
-                posting_obj = self.get_postings_list(term)
-                occurrences = int(posting_obj.occurrences)
-
                 tf = 1 + math.log(term_dict[term], 10)
-
-                if occurrences != 0:
-                    idf = math.log(self.N/occurrences, 10)
+                idf = self.calculate_idf(term)
                 
                 w_tq = tf * idf
                 query_weight_dict[term] = w_tq
@@ -324,11 +335,13 @@ class QueryParser:
         return synonyms
 
     def rocchio(self, normalized_query_vectors, relevant_docs, alpha=1, beta=0.70, gamma=0.05):
-        docs_id_set = set()
+        manager = multiprocessing.Manager()
+        pool = manager.Pool()
+        # docs_id_set = set()
         
-        centroid_weights = collections.defaultdict(float)
-        anti_centroid_weights = collections.defaultdict(float)
-        query_centroid = collections.defaultdict(float)
+        centroid_weights = manager.dict()
+        # anti_centroid_weights = collections.defaultdict(float)
+        query_centroid = manager.dict()
 
         num_relevant_docs = len(relevant_docs)
 
@@ -340,31 +353,25 @@ class QueryParser:
             print("time taken for getting all weights: " + str(end - st))
 
         # Find the weights of the the terms inside the relevant documents
+        st = time.time()
         for term, posting in self.term_weights_dict.items():
-            # postings_dict is a dictionary that has the doc_id as key and an object containing the weight and positions
-            # Example for the word 'inform':
-            # 1. '12323': {'weight': 1.2323, 'positions': [12, 356, 2234]}
-            postings_dict = posting.postings
-            for doc_id, props in postings_dict.items():
-                weight = props['weight']
-                # Add to set of document collection
-                if doc_id not in docs_id_set:
-                    docs_id_set.add(doc_id)
+            pool.apply_async(self.rocchio_centroid_update_worker, args=(term, posting, relevant_docs, centroid_weights))
 
-                if doc_id in relevant_docs:
-                    # Add to relevant centroid weights
-                    centroid_weights[term] += weight
-                else: 
-                    # Add to non-relevant centroid weights
-                    anti_centroid_weights[term] += weight
+        pool.close()
+        pool.join()
+        end = time.time()
+        print("time taken for getting calculating relevant centroid: " + str(end - st))
 
         # Calculate the average weight of the a term across all relevant documents 
+        st = time.time()
+        pool = manager.Pool()
         for term in centroid_weights:
-            centroid_weights[term] /= num_relevant_docs
-        
-        # Calculate the average weight of the a term across all non relevant documents 
-        for term in anti_centroid_weights:
-            anti_centroid_weights[term] /= (len(docs_id_set) - num_relevant_docs)   
+            pool.apply_async(self.rocchio_normalise_centroid_worker, args=(centroid_weights, term, num_relevant_docs))
+
+        pool.close()
+        pool.join()
+        end = time.time()
+        print("time taken for getting normalising centroid: " + str(end - st))
 
         st = time.time()
         # Calculate the Rocchio algorithm
@@ -374,13 +381,37 @@ class QueryParser:
         for term, weight in centroid_weights.items():
             query_centroid[term] += beta * weight
 
-        for term, weight in anti_centroid_weights.items():
-            query_centroid[term] -= gamma * weight
+        # for term, weight in anti_centroid_weights.items():
+        #     query_centroid[term] -= gamma * weight
 
         end = time.time()
         print("time taken calculate rocchio: " + str(end - st))
 
         return query_centroid
+    
+    def rocchio_normalise_centroid_worker(self, centroid_weights, term, num_relevant_docs):
+        # Calculate the average weight of the a term across all non relevant documents 
+        centroid_weights[term] /= num_relevant_docs
+    
+    def rocchio_centroid_update_worker(self, term, posting, docs_id_set, relevant_docs, centroid_weights, anti_centroid_weights):
+        # postings_dict is a dictionary that has the doc_id as key and an object containing the weight and positions
+        # Example for the word 'inform':
+        # 1. '12323': {'weight': 1.2323, 'positions': [12, 356, 2234]}
+        postings_dict = posting.postings
+        term_idf = self.calculate_idf(term)
+        for doc_id, props in postings_dict.items():
+            weight = props['weight']
+            # Add to set of document collection
+            if doc_id not in docs_id_set:
+                docs_id_set.add(doc_id)
+
+            if doc_id in relevant_docs:
+                # Add to relevant centroid weights
+                centroid_weights[term] += weight * term_idf
+            else: 
+                # Add to non-relevant centroid weights
+                anti_centroid_weights[term] += weight * term_idf
+
 
     # ==========================================================================
     # ====================== PHRASAL QUERY PROCESSING ==========================
@@ -449,30 +480,44 @@ class QueryParser:
         context, occurrences, postings = line.split(' ', 2)
         posting = Posting(context, occurrences, postings)
         output_queue.put((context, posting))
+    
+
+    def process_line_parallel(self, line):
+        line = line.strip()
+        context, occurrences, postings = line.split(' ', 2)
+        posting = Posting(context, occurrences, postings)
+        return context, posting
 
     def get_all_doc_weights(self):
         doc_weights_dic = collections.defaultdict()
-        output_queue = queue.Queue()
+        # output_queue = multiprocessing.Queue()
 
         # Start a worker thread for each CPU core
         num_threads = multiprocessing.cpu_count()
+        pool = multiprocessing.Pool()
         threads = []
         with open(self.postings_file, 'r') as f:
-            for i in range(num_threads):
-                thread = threading.Thread(target=self.process_lines_worker, args=(f, output_queue))
-                threads.append(thread)
-                thread.start()
+            output_queue = pool.map(self.process_line_parallel, iter(f.readline, ''))
+            # for i in range(num_threads):
+            #     thread = threading.Thread(target=self.process_lines_worker, args=(f, output_queue))
+            #     threads.append(thread)
+            #     thread.start()
 
-            # Wait for all threads to finish
-            for thread in threads:
-                thread.join()
+            # # Wait for all threads to finish
+            # for thread in threads:
+            #     thread.join()
 
+        
         # Read results from the output queue
-        while not output_queue.empty():
-            context, posting = output_queue.get()
+        for context, posting in output_queue:
             doc_weights_dic[context] = posting
 
+        # while not output_queue.empty():
+        #     context, posting = output_queue.get()
+        #     doc_weights_dic[context] = posting
+
         return doc_weights_dic
+    
 
     def process_lines_worker(self, f, output_queue):
         try:
@@ -481,19 +526,19 @@ class QueryParser:
         except Exception as e:
             print(f"An error occurred: {e}")
 
-    def get_all_doc_weights(self):
-        doc_weights_dic = collections.defaultdict()
-        with open(self.postings_file, 'r') as f:
-            try:
-                for line in f:
-                    line = line.strip()
-                    context, occurrences, postings = line.split(' ', 2)
-                    posting = Posting(context, occurrences, postings)
-                    doc_weights_dic[context] = posting
-            except:
-                print("An error occurred")
+    # def get_all_doc_weights(self):
+    #     doc_weights_dic = collections.defaultdict()
+    #     with open(self.postings_file, 'r') as f:
+    #         try:
+    #             for line in f:
+    #                 line = line.strip()
+    #                 context, occurrences, postings = line.split(' ', 2)
+    #                 posting = Posting(context, occurrences, postings)
+    #                 doc_weights_dic[context] = posting
+    #         except:
+    #             print("An error occurred")
         
-        return doc_weights_dic
+    #     return doc_weights_dic
 
     def get_postings_list(self, term):
         postings_list_ptr = self.postings_reader.get_postings_ptr(term)
