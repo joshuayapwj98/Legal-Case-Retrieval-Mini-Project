@@ -152,7 +152,7 @@ class QueryParser:
             self_combining_stack.push(postings_list)
             
         common_docs = self_combining_stack.pop()
-        return common_docs
+        return list(common_docs)
 
     # ======================================================================
     # ====================== FREE TEXT PROCESSING ==========================
