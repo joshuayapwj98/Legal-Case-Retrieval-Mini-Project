@@ -31,15 +31,16 @@ def run_search(dict_file, postings_file, queries_path, results_file):
     count = 1
     # Iterate through all the files in the queries folder
     for file_name in os.listdir(queries_path):
-        if count == 0: break
+        # if count == 0: break
         file_path = os.path.join(queries_path, file_name)
         if os.path.isfile(file_path):
             with open(file_path, 'r') as file:
-                count -= 1
                 # Get the contents of the text file and split it by the break line
                 contents = file.read().split('\n')
                 result = parser.process_query(contents, 10)
-                print(result)
+                print('result for q' + str(count), result)
+                count += 1
+                
 
 dictionary_file = postings_file = file_of_queries = output_file_of_results = None
 

@@ -16,7 +16,7 @@ class PostingsReader:
         if postings_ptr != -1: 
             with open("postings.txt", 'r') as f:
                 f.seek(postings_ptr, 0)
-                print("postings list retrieved:", f.readline())
+                # print("postings list retrieved:", f.readline())
 
         return postings_ptr
 
@@ -27,7 +27,7 @@ class PostingsReader:
         with open('postings.txt', 'r') as f: 
             line = f.readline()
             values = line.split()
-            print("doc_freq for term ", values[0], "is ", values[1])
+            # print("doc_freq for term ", values[0], "is ", values[1])
             return values[1]
 
     '''
@@ -35,7 +35,7 @@ class PostingsReader:
     '''
     def binary_search(self, query_term):
 
-        print("running binary search...")
+        # print("running binary search...")
         # Binary search through the DictPtrs 
         left = 0 
         right = len(self.pointer_data) - 1
@@ -73,7 +73,7 @@ class PostingsReader:
 
                 # Return if matching 
                 if query_term == term:
-                    print('postings list pointer:', int(curr_block[i + 1]) )
+                    # print('postings list pointer:', int(curr_block[i + 1]) )
                     return int(curr_block[i + 1]) 
                 
             # Terms did not match
@@ -87,5 +87,5 @@ class PostingsReader:
             else: 
                 break
         
-        print("Term not found in dictionary...")
+        # print("Term not found in dictionary...")
         return -1 

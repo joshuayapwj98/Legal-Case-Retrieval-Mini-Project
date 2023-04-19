@@ -19,7 +19,7 @@ class Stack:
         self.items = self.items[:-2] + [result]
 
     def AND_operation(self, postings_1, postings_2):
-        print("applying AND operation...")
+        # print("applying AND operation...")
         print(postings_1, postings_2)
         common_documents = postings_1 & postings_2
         return common_documents

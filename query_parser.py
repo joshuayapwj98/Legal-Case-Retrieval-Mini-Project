@@ -10,6 +10,13 @@ import time
 from nltk.stem.porter import PorterStemmer
 from postings_reader import PostingsReader
 
+nltk.download('wordnet')
+nltk.download('stopwords')
+
+from nltk.corpus import wordnet
+from nltk.corpus import stopwords
+from string import punctuation
+
 class Posting:
 
     def __init__(self, context = "", occurrences = 0, postings = {}):
@@ -55,7 +62,32 @@ class QueryParser:
         if 'AND' in query[0]:
             results = self.process_boolean_query(query)
         else:
-            results = self.process_freetext_query(query)
+            normalization_query_vectors, top_documents = self.process_freetext_query(query)
+            # TESTING
+            # top_documents = []
+            if len(query) > 1:
+                other_relevant_docs = [doc_id for doc_id in query[1:]]
+                for doc_id in other_relevant_docs:
+                    top_documents.append(int(doc_id))
+            # First optimization: Start of Pseudo Relevance Feedback (RF)
+            new_query_vectors = self.rocchio(normalization_query_vectors, top_documents)
+            top_term_vectors = self.get_top_K_word_vectors(new_query_vectors, 100)
+            # new_query_terms = self.filter_relevant_words(self.tokenize_query(query[0]), top_term_vectors, False)
+            
+            # Second optimization: Perform filtering and query optimzation with WordNet
+            # new_query_terms = self.filter_relevant_words(self.tokenize_query(query[0]), top_term_vectors)
+            
+            # Update query terms into normalization_query_vectors
+            for term in top_term_vectors:
+                normalization_query_vectors[term[1]] = term[0]
+
+            # Create new revised query
+            # revised_query = query[0]
+            # for term in top_term_vectors:
+            #     revised_query += ' ' + term[1]
+
+            normalization_query_vectors, top_documents = self.process_freetext_query(query, normalization_query_vectors)
+            results = top_documents
 
         return results
 
@@ -73,7 +105,7 @@ class QueryParser:
 
         # Split the query string into terms using 'AND' as the delimiter
         terms = query[0].split(' AND ')
-        print(terms)
+        # print(terms)
 
         # 1. Go through the entire query and put it into a py dict.
         # Put phrasal queries in a separate dictionary, where the key is the phrasal query and the value is the postings list. 
@@ -86,12 +118,12 @@ class QueryParser:
             postings_result_set = set()
             if self.is_phrase(t):
                 phrasal_terms = self.tokenize_boolean_query(t) # Returns a list of up to 3 terms (phrase)
-                print(phrasal_terms)
+                # print(phrasal_terms)
                 postings_result_set = self.process_phrase(phrasal_terms)
-                print("These are the results:", postings_result_set)
+                # print("These are the results:", postings_result_set)
                 
                 # Add to temp dictionaries to do AND operations
-                print(t, postings_result_set)
+                # print(t, postings_result_set)
                 terms_postings_list[t] = postings_result_set
                 terms_doc_freq[t] = len(postings_result_set)
 
@@ -102,8 +134,8 @@ class QueryParser:
                 terms_postings_list[t] = set(postings_list.keys())
                 terms_doc_freq[t] = len(set(postings_list.keys()))
         
-        print(terms_postings_list)
-        print(terms_doc_freq)
+        # print(terms_postings_list)
+        # print(terms_doc_freq)
 
         # 2. Loop, maintaining a stack of size 2 to operate 'AND' on.
         self_combining_stack = Stack()
@@ -111,9 +143,9 @@ class QueryParser:
             
             # 2a. Pop the smallest value in the dictionary, get the postings list of the key, and add it to the stack. 
             min_key = min(terms_doc_freq, key=terms_doc_freq.get)
-            print(min_key)
+            # print(min_key)
             postings_list = terms_postings_list[min_key]
-            print(postings_list)
+            # print(postings_list)
             terms_doc_freq.pop(min_key)
 
             # 2b. Add to operator stack
@@ -130,7 +162,7 @@ class QueryParser:
     - quiet phone call
     - good grades exchange scandal
     '''
-    def process_freetext_query(self, query):
+    def process_freetext_query(self, query, normalization_query_vectors = []):
         # Collection to count the occurences of a term in a query
         query_count_dict = collections.defaultdict(lambda: 0)
 
@@ -141,8 +173,9 @@ class QueryParser:
         for term in terms:
             query_count_dict[term] += 1
 
-        # Get normalization query vectors
-        normalization_query_vectors = self.get_query_normalization_vectors(query_count_dict)
+        if len(normalization_query_vectors) == 0:
+            # Get normalization query vectors
+            normalization_query_vectors = self.get_query_normalization_vectors(query_count_dict)
 
         # Calculate the scores of each term w.r.t document
         for term in terms:
@@ -163,12 +196,7 @@ class QueryParser:
         # Get top K documents
         top_documents = self.get_top_K_components(score_dict, self.K)
 
-        # Start of Pseudo Relevance Feedback (RF)
-        # TODO: Get top scores and use it to append it to the query for a new free_text search
-        # Use the top M documents from the rocchio
-        new_query_vectors = self.rocchio(normalization_query_vectors, top_documents)
-        
-        return top_documents
+        return normalization_query_vectors, top_documents
     
     # ====================================================================
     # ====================== RANKING PROCESSING ==========================
@@ -228,6 +256,21 @@ class QueryParser:
         
         return norm_query_weight_dict
 
+    def get_top_K_word_vectors(self, scores_dic, K):
+        result = []
+        score_tuples = [(-score, doc_id) for doc_id, score in scores_dic.items()]
+        
+        heapq.heapify(score_tuples)
+
+        for i in range(K):
+            if len(score_tuples) != 0:
+                tuple_result = heapq.heappop(score_tuples)
+                result.append((abs(tuple_result[0]),) + tuple_result[1:])
+            else:
+                break
+
+        return result
+    
     def get_top_K_components(self, scores_dic, K):
         result = []
         score_tuples = [(-score, doc_id) for doc_id, score in scores_dic.items()]
@@ -243,7 +286,35 @@ class QueryParser:
 
         return result
     
-    def rocchio(self, normalized_query_vectors, relevant_docs, alpha=0.85, beta=0.1, gamma=0.05):
+    # ===========================================================================
+    # ====================== QUERY EXPANSION TECHNIQUE ==========================
+    # ===========================================================================
+
+    # def filter_relevant_words(self, query, terms, use_word_net = True):
+    #     stop_words = set(stopwords.words('english'))
+    #     punc = set(punctuation)
+        
+    #     filtered_words = [term for term in terms if term[1] not in stop_words \
+    #                       and term[1] not in punc \
+    #                         and term[1] not in query]
+        
+    #     if use_word_net == True:
+    #         relevant_synonyms = self.word_net(query)
+    #         filtered_words = [term for term in terms if term[1] in relevant_synonyms]
+        
+    #     return filtered_words
+
+    def word_net(self, query):
+        # Find synonyms for each word in the query
+        synonyms = set()
+        for word in query:
+            for synset in wordnet.synsets(word):
+                synonyms.update(synset.lemma_names())
+
+        print("Synonyms:", synonyms)
+        return synonyms
+
+    def rocchio(self, normalized_query_vectors, relevant_docs, alpha=1, beta=0.70, gamma=0.05):
         docs_id_set = set()
         
         centroid_weights = collections.defaultdict(float)
@@ -371,10 +442,10 @@ class QueryParser:
         postings_list_ptr = self.postings_reader.get_postings_ptr(term)
         with open('postings.txt', 'r') as f:
             if postings_list_ptr == -1:
-                print('[DEBUG] Cannot find term', term)
+                # print('[DEBUG] Cannot find term', term)
                 posting = Posting(term)
             else:
-                print('[DEBUG] Found term', term)
+                # print('[DEBUG] Found term', term)
                 line = f.seek(postings_list_ptr, 0)
                 line = f.readline().strip()
                 context, occurrences, postings = line.split(' ', 2)
