@@ -1,7 +1,7 @@
 # CS3245-Legal-Case-Retrieval-Mini-Project
 
 This is the README file for A0222182R's, A0222371R's, A0218297U's and A0217487U's submission
-Email(s): e0559714@u.nus.edu, e0559903@u.nus.edu, e0544333@u.nus.edu
+Email(s): e0559714@u.nus.edu, e0559903@u.nus.edu, e0544333@u.nus.edu, e0543523@u.nus.edu
 
 == Python Version ==
 
