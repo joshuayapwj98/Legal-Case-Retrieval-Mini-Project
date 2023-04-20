@@ -108,6 +108,7 @@ At the start, we segregate each query into two major functions; boolean query an
 
 The second approach is utilizing NLTK's OpenNet library to find relevant terms with respect to the query. It then ranks the synonyms based on their frequency and keeps only the top 50 words. Finally, it returns a set of single relevant words. When complete, we append the relevant words to the original query and run a free text search to get the ranked documents list.
 
+For the boolean query, we compute each term separated by the ‘AND’ operator and get the relevant documents from the query. These terms are either processed as single word queries or phrasal queries. For the phrasal queries, we utilise the postings list which include the gap encoded positional indices of the term in the document. For term ‘A’ and term ‘B’ in the same phrase ‘A B’ for instance, we return the common documents where the positional indices match up. From the relevant documents, we add them to a stack which automatically performs a boolean AND operation on the documents. This stack is optimised to work with the terms with the smallest number of documents first so that the AND operation is efficient. At the end, we return the common relevant documents. 
 
 == Files included with this submission ==
 
