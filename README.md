@@ -121,7 +121,9 @@ For the boolean query, we compute each term separated by the ‘AND’ operator 
 7. document.txt - a text file containing total number of docs and all IDs sorted in increasing order
 8. pointers.txt - a text file containing pointers to dictionary and posting files
 9. search.py - the main program to run the searching, which calls query_parser.py
-10. query_parser - processes the query and is able to perform query expansion to provide relevant documents
+10. query_parser.py - processes the query and is able to perform query expansion to provide relevant documents
+11. postings_reader.py - retrieves postings lists of terms, done by accessing the pointers.txt file and dictionary.txt file which use index compression.
+12. stack.py - combines postings lists to return common documents using an AND operator. 
 
 == Statement of individual work ==
 
