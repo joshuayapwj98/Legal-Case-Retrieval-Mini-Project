@@ -9,16 +9,27 @@ from nltk.stem.porter import PorterStemmer
 
 class VectorSpaceModel:
     """
-    Class that construct and write data from in_dir into out_dict, out_postings, all_doc_ids.txt and document.txt files
+    Class that construct and write data from in_dir into out_dict, out_postings, all_doc_ids.txt, document.txt and pointers.txt files
 
-    in_dir: input directory containing all documents for indexing
-    out_dict: output file written in the form of [term doc_freq posting_ref]
-    out_postings: output file written in the form of [term (docID, w-tf) (docID, w-tf) ...], 
-                    where w-tf = (1 + log(tf)), 
+    in_dir: input dataset file containing all documents for indexing
+    out_dict: output file written in the form of 
+                    |term1_len|term1|term2_len|term2...
+    out_postings: output file written in the form of 
+                    term documentFrequency
+                    docID,wt,d:position1 position2... gapEncodedID,wt,d:position1 position2...
+                    term2 documentFrequency
+                    docID,wt,d:position1 position2... gapEncodedID,wt,d:position1 position2...
+                    ...
+                    where wt,f = (1 + log(tf)), 
                     where tf is the term frequency of the term t in docID
     all_doc_ids.txt: output file containing the ID of all documents, separated by a single space
-    document.txt: output file written in the form of [total_num_of_doc (docID, len_of_doc) (docID, len_of_doc) ...],
+    document.txt: output file written in the form of 
+                    total_num_of_doc docID,len_of_doc docID,len_of_doc ...
                     where len_of_doc is the length of the document in vector space 
+    pointers.txt: output file written in the form of
+                    DictPtr,PostingPtr1,PostingPtr2,PostingPtr3,PostingPtr4
+                    DictPtr2,PostingPtr1,PostingPtr2,PostingPtr3,PostingPtr4
+                    ...
     """
 
     def __init__(self, in_dir, out_dict, out_postings):
@@ -33,14 +44,14 @@ class VectorSpaceModel:
     
     def parse_data(self):
         """
-        
+        Method to parse all document data from the input dataset.
 
             Returns:
-                
+                all_doc_ids, title, content, date_posted, court
         """
         total_docs = -1
         max_docs = float('inf')
-        # max_docs = 100
+        # max_docs = 100 
 
         all_doc = {}
         all_doc_ids = []
@@ -120,9 +131,8 @@ class VectorSpaceModel:
         all_doc_ids, title, content, date_posted, court = self.parse_data()
         total_num_docs = len(all_doc_ids)
         terms = {} # a list of terms
-        term_doc_freq = {} # key: string, value: int { term : doc_freq }
+        term_doc_freq = {} # { term : doc_freq }
         term_id_pos = {} # { term : { docID : [position...] } }
-        postings = {} # key: string, value: a dictionary { term : {docID : term_freq, docID : term_freq ...} }
         count = 0
 
         for doc_id in all_doc_ids:
@@ -178,14 +188,14 @@ class VectorSpaceModel:
 
     def construct_weighted_postings(self, all_doc_ids, term_id_pos):
         """
-        Method to calculate weighted = 1 + log(term_frequency)
-        Replace term_freq to weighted in postings, and get the length of each document and store in doc_len
+        Method to construct postings by calculating weighted tf = 1 + log(term_frequency), and calculates length of each document and store in doc_len
 
             Parameter:
-                postings: a dictionary with string as key and dictionary as value, { term : {docID : term_freq, docID : term_freq ...} }
+                all_doc_ids: a list of all document ids sorted in ascending order
+                term_id_pos: a dictionary with string as key and dictionary as value, { term : { docID : [position...] } }
             
             Returns:
-                doc_len and updated postings
+                doc_len and postings
         """
         doc_len = {} # { docID : doc_len, docID : doc_len ... }
         postings = {} # { term : (docID,weightedtf) : [position...] }
@@ -194,12 +204,11 @@ class VectorSpaceModel:
         for doc_id in all_doc_ids:
             doc_len[doc_id] = 0 
 
-        # normalise term frequency for each document
+        # calculate log term frequency 
         for term in term_id_pos: # { term : docID : [position...]}
             for doc_id in term_id_pos[term]:
                 term_freq = len(term_id_pos[term][doc_id])
                 log_term_freq_weighted = 1 + math.log(term_freq, 10)
-                # term_id_pos[term][doc_id] = log_term_freq_weighted # value as { docID : log_term_freq_weighted ... }
 
                 if term not in postings:
                     postings[term] = {}
@@ -218,30 +227,27 @@ class VectorSpaceModel:
 
     def write_output_files(self, terms, term_doc_freq, postings):
         """
-        Method to write into out_dict, out_postings and document.txt
+        Method to write into out_dict, out_postings and pointers.txt files
 
             Parameters:
-                terms: a list of string, sorted in ascending alphanumeric order
+                terms: a dictionary with key as string, sorted in ascending alphanumeric order
                 term_doc_freq: a dictionary with string as key and int as value, { term : doc_freq }
-                postings: a dictionary with string as key and dictionary as value, { term : {docID : term_freq, docID : term_freq ...} }
-                doc_len: a dictionary with string as key and int as value, { docID : doc_len, docID : doc_len ... }
-                total_num_docs: an int representing the total number of documents
+                postings: a dictionary with string as key and dictionary as value, { term : (docID,weightedtf) : [position...] }
                 
         """
         print("preapring content for dictionary, postings and documents output files...")
 
-        final_dictionary = "" # term doc_freq reference
-        final_postings = "" # term (docID,term_freq) (docID,term_freq) ...
-        final_pointers = "" # (dict_ptr,posting_ptr,posting_ptr,posting_ptr,posting_ptr) ...
-        acc_dictionary_content = ""
-        posting_ref = 0
-        dictionary_ref = 0
-        block_size = 4 # index compression blocking
+        final_dictionary = "" # |term1_len|term1|term2_len|term2...
+        final_postings = "" # term documentFrequency docID,wt,d:position1 position2... gapEncodedID,wt,d:position1 position2...
+        final_pointers = "" # dict_ptr,posting_ptr1,posting_ptr2,posting_ptr3,posting_ptr4 ...
+        acc_dictionary_content = "" # accumulated temporary dictionary content for every 4 terms 
+        posting_ref = 0 # reference pointer pointing to postings file 
+        dictionary_ref = 0 # reference pointer pointing to dictionary file
+        block_size = 4 # index compression blocking size
         posting_pointer = list()
 
         for term in terms:
             # postings = { term : { (docID,weightedtf) : [position...] } }
-
             posting = postings[term] # { (docID,weightedtf) : [position...] }
             doc_freq = str(term_doc_freq[term]) # { term : doc_freq }
             posting_content = ""
@@ -257,35 +263,45 @@ class VectorSpaceModel:
                 position = ""
                 prev_pos = 0
                 for pos in positions:
-                    position += str(pos-prev_pos) + ","
+                    position += str(pos-prev_pos) + "," # gap encoded positions
                     prev_pos = pos
 
                 position = position[:-1] # remove last comma
-                posting_content += " {},{}:{}".format(gap_encoded_id, weightedtf, position)
+                posting_content += " {},{}:{}".format(gap_encoded_id, weightedtf, position) 
 
                 prev_id = doc_id
 
-            new_posting = "{} {}{}\n".format(term, doc_freq, posting_content)
+            # construct new posting content
+            new_posting = "{} {}{}\n".format(term, doc_freq, posting_content) 
 
+            # update posting pointers and final posting content
             posting_pointer.append(posting_ref)
             posting_ref += len(new_posting.encode('utf-8'))
             final_postings += new_posting
 
+            # update temporary dictionary content
             if (len(posting_pointer) < block_size):
                 dictionary_content = "|{}|{}".format(str(len(term.encode('utf-8'))), term)
                 acc_dictionary_content += dictionary_content
+            
+            # for every 4 terms, update final dictionary and pointers content
             else:
+                # update temporary dictionary content
                 dictionary_content = "|{}|{}".format(str(len(term.encode('utf-8'))), term)
                 acc_dictionary_content += dictionary_content
                 final_dictionary += acc_dictionary_content
 
+                # construct pointers content and update final pointers content
                 posting_ref_content = ','.join(str(e) for e in posting_pointer)
                 dict_post_pointer = " {},{}".format(dictionary_ref, posting_ref_content)
                 dictionary_ref += len(acc_dictionary_content.encode('utf-8'))
                 final_pointers += dict_post_pointer
+
+                # reset values 
                 posting_pointer = list()
                 acc_dictionary_content = ""
         
+        # add last few terms into output files content
         if (len(posting_pointer) != 0):
             posting_ref_content = ','.join(str(e) for e in posting_pointer)
             dict_post_pointer = " {},{}".format(dictionary_ref, posting_ref_content)
@@ -300,7 +316,10 @@ class VectorSpaceModel:
         self.write_content("pointers.txt", final_pointers)
 
     def write_output_document(self, total_num_docs, doc_len):
-        final_document = "" # totalNumDocs (docID,lenOfDoc) (docID,lenOfDoc) ...
+        """
+        Method to write to document.txt file
+        """
+        final_document = "" # totalNumDocs docID,lenOfDoc docID,lenOfDoc ...
         final_document += str(total_num_docs)
 
         for doc_id in doc_len:
