@@ -507,48 +507,48 @@ class QueryParser:
     # ====================== ACCESS INDEXING ===================================
     # ==========================================================================
 
-    # def get_all_doc_weights(self):
-    #     doc_weights_dic = collections.defaultdict()
-    #     with open(self.postings_file, 'r') as f:
-    #         try:
-    #             for line in f:
-    #                 line = line.strip()
-    #                 context, occurrences, postings = line.split(' ', 2)
-    #                 posting = Posting(context, occurrences, postings)
-    #                 doc_weights_dic[context] = posting
-    #         except:
-    #             print("An error occurred")
-        
-    #     return doc_weights_dic
-
     def get_all_doc_weights(self):
         doc_weights_dic = collections.defaultdict()
-        output_queue = queue.Queue()
-
-        # Start a worker thread for each CPU core
-        num_threads = multiprocessing.cpu_count()
-        threads = []
         with open(self.postings_file, 'r') as f:
-            chunk_size = int(os.path.getsize(self.postings_file) / num_threads) + 1
-            for i in range(num_threads):
-                thread = FileReaderThread(f, chunk_size, output_queue)
-                threads.append(thread)
-                thread.start()
-
-            # Read results from the output queue
-            for i in range(num_threads):
-                while True:
-                    chunk_result = output_queue.get()
-                    if chunk_result is None:
-                        break
-                    for context, posting in chunk_result.items():
-                        doc_weights_dic[context] = posting
-
-            # Wait for all threads to finish
-            for thread in threads:
-                thread.join()
-
+            try:
+                for line in f:
+                    line = line.strip()
+                    context, occurrences, postings = line.split(' ', 2)
+                    posting = Posting(context, occurrences, postings)
+                    doc_weights_dic[context] = posting
+            except:
+                print("An error occurred")
+        
         return doc_weights_dic
+
+    # def get_all_doc_weights(self):
+    #     doc_weights_dic = collections.defaultdict()
+    #     output_queue = queue.Queue()
+
+    #     # Start a worker thread for each CPU core
+    #     num_threads = multiprocessing.cpu_count()
+    #     threads = []
+    #     with open(self.postings_file, 'r') as f:
+    #         chunk_size = int(os.path.getsize(self.postings_file) / num_threads) + 1
+    #         for i in range(num_threads):
+    #             thread = FileReaderThread(f, chunk_size, output_queue)
+    #             threads.append(thread)
+    #             thread.start()
+
+    #         # Read results from the output queue
+    #         for i in range(num_threads):
+    #             while True:
+    #                 chunk_result = output_queue.get()
+    #                 if chunk_result is None:
+    #                     break
+    #                 for context, posting in chunk_result.items():
+    #                     doc_weights_dic[context] = posting
+
+    #         # Wait for all threads to finish
+    #         for thread in threads:
+    #             thread.join()
+
+    #     return doc_weights_dic
 
     def get_postings_list(self, term):
         postings_list_ptr = self.postings_reader.get_postings_ptr(term)

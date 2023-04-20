@@ -1,7 +1,7 @@
 # CS3245-Legal-Case-Retrieval-Mini-Project
 
 This is the README file for A0222182R's, A0222371R's, A0218297U's and A0217487U's submission
-Email(s): e0559714@u.nus.edu, e0559903@u.nus.edu,
+Email(s): e0559714@u.nus.edu, e0559903@u.nus.edu, e0544333@u.nus.edu
 
 == Python Version ==
 
@@ -101,8 +101,13 @@ The dictionary reference is updated by adding the result of the encoded length o
 
 The algorithm repeats until all contents of dictionary, postings and pointers are generated. They are then written into the respective output files.
 
-###About Querying
 ####Search
+Query search can be broken down into several parts. 1. Segregation 2. tokenization and parsing 3. intital query; and 4. query optimization. 
+
+At the start, we segregate each query into two major functions; boolean query and free text query. In each, we follow the standard procedure of tokenizing and parsing - perform stemming and separating terms in the query. For the different queries, we perform different functional steps to evaluate the query and retrieve the relevant documents. For the open free text queries, our team implemented 2 different query expansion techniques. For the Rocchio algorithm, we decided to only compute the query centroid and the relevant document centroid as they are primarily having the highest weightage when recomputing the search query vectors. During the process, we realize that it was also important to include the inverted document frequency (IDF) calculation for each document. In doing so, it highlights rare terms in the documents and gives a lower percent on common terms.
+
+The second approach is utilizing NLTK's OpenNet library to find relevant terms with respect to the query. It then ranks the synonyms based on their frequency and keeps only the top 50 words. Finally, it returns a set of single relevant words. When complete, we append the relevant words to the original query and run a free text search to get the ranked documents list.
+
 
 == Files included with this submission ==
 
@@ -114,8 +119,8 @@ The algorithm repeats until all contents of dictionary, postings and pointers ar
 6. all_doc_ids.txt - a text file containing all the document IDs
 7. document.txt - a text file containing total number of docs and all IDs sorted in increasing order
 8. pointers.txt - a text file containing pointers to dictionary and posting files
-9. search.py - the main program to run the searching, which calls vector_search.py
-10.
+9. search.py - the main program to run the searching, which calls query_parser.py
+10. query_parser - processes the query and is able to perform query expansion to provide relevant documents
 
 == Statement of individual work ==
 
